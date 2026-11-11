@@ -1,0 +1,58 @@
+name: Build release
+
+# Manual only: run it from the Actions tab (Run workflow). It never starts on push or pull request.
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # Dulu Gradle diunduh oleh setup-gradle dan gagal kalau services.gradle.org membalas 504.
+      # Sekarang diunduh sendiri: ulang otomatis + 3 sumber cadangan (termasuk GitHub).
+      - name: Install Gradle 8.11.1
+        run: |
+          VER=8.11.1
+          ok=0
+          for url in \
+            "https://services.gradle.org/distributions/gradle-$VER-bin.zip" \
+            "https://downloads.gradle.org/distributions/gradle-$VER-bin.zip" \
+            "https://github.com/gradle/gradle-distributions/releases/download/v$VER/gradle-$VER-bin.zip"; do
+            echo "Mengunduh: $url"
+            if curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors --connect-timeout 20 -o /tmp/gradle.zip "$url" && unzip -tq /tmp/gradle.zip; then
+              ok=1
+              break
+            fi
+            echo "Gagal dari sumber ini, coba sumber berikutnya..."
+          done
+          if [ "$ok" != 1 ]; then echo "Semua sumber Gradle gagal diunduh"; exit 1; fi
+          sudo unzip -q /tmp/gradle.zip -d /opt
+          echo "/opt/gradle-$VER/bin" >> "$GITHUB_PATH"
+
+      # Hanya cache; Gradle sudah terpasang di langkah atas.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          validate-wrappers: false
+
+      - name: Build release
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: |
+          for i in 1 2 3; do
+            gradle assembleRelease --console=plain && exit 0
+            echo "Percobaan $i gagal (kemungkinan jaringan), mengulang dalam 20 detik..."
+            sleep 20
+          done
+          exit 1
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plaza-release
+          path: app/build/outputs/apk/release/*.apk
