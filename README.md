@@ -1,113 +1,140 @@
 # Plaza
 
-An ad-free YouTube player for Android, built in Material 3 Expressive.
+Pemutar YouTube tanpa iklan untuk Android, dibuat dengan Material 3 Expressive.
 
-No ads. Use it signed out, or sign in with Google to get your own recommendations,
-subscriptions, history and playlists, with likes, subscribes and watch history syncing back.
-Sponsor segments get skipped with [SponsorBlock](https://sponsor.ajay.app).
+Tanpa iklan. Bisa dipakai tanpa masuk akun, atau masuk dengan Google untuk mendapat rekomendasi,
+langganan, riwayat, dan playlist milikmu sendiri; suka, langganan, dan riwayat tontonan ikut
+tersinkron ke akun. Segmen sponsor dilewati otomatis dengan [SponsorBlock](https://sponsor.ajay.app).
 
-| Search | Player | Mini-player |
-|---|---|---|
-| ![Search](docs/screens/step1-search.png) | ![Player](docs/screens/step1-player.png) | ![Mini-player](docs/screens/step1-mini.png) |
+## Unduh
 
-## Download
+**Plaza.apk**: rilis terbaru dari repositori milikmu sendiri (atur `UPDATE_REPO` di `Updater.kt`).
+Buka di HP, lalu izinkan pemasangan dari browser. Pembaruan terpasang di atas versi sebelumnya.
 
-**Plaza.apk**: the latest release of your own repository (set `UPDATE_REPO` in `Updater.kt`). Open it on your phone and allow installs from your browser. Updates install over
-the previous version.
+Menerbitkan build baru (tautan tetap sama): naikkan `versionName` dan `versionCode` di
+`app/build.gradle.kts`, lalu jalankan `scripts/publish-apk.sh`.
 
-Publishing a new build (same link): bump `versionName`/`versionCode` in `app/build.gradle.kts`, then
-run `scripts/publish-apk.sh`.
+## Fitur
 
-## Features
+**Menonton**
+- **Cari** di YouTube tanpa perlu masuk akun, dengan saran pencarian dan riwayat pencarian.
+- **Pemutaran** hingga 1080p; video dan audio diambil sebagai aliran terpisah lewat manifes DASH
+  buatan sendiri (menghindari pembatasan kecepatan YouTube).
+- **Siaran langsung (Live)** bisa ditonton, lengkap dengan lencana LIVE dan obrolan langsung.
+- **Kontrol pemutar:** maju/mundur 10 detik, tombol putar/jeda yang berubah bentuk, penggeser
+  durasi, kontrol yang tersembunyi otomatis, dan pratinjau bingkai saat menggeser.
+- **Mini-player** yang menyatu dengan pemutar: video tumbuh dari gambar mini. Geser pemutar ke
+  bawah untuk memperkecil, atau geser mini-player ke atas untuk memperbesar.
+- **Layar penuh lanskap** dengan memutar HP atau menekan tombol layar penuh; geser kiri untuk
+  kecerahan dan kanan untuk volume.
+- **Audio saja** dan **suara latar** dengan notifikasi media (layar kunci juga bisa dikontrol).
+- **Kecepatan putar**, **pilihan kualitas** (Otomatis atau tinggi apa pun yang ditawarkan YouTube,
+  diingat), dan **subtitle (CC)**.
+- **Lanjutkan menonton:** posisi terakhir diingat dan tampil sebagai garis tipis di gambar mini;
+  sesi yang sedang dibuka dipulihkan setelah aplikasi tertutup.
+- **Antrean:** tekan lama video untuk Putar berikutnya atau Tambah ke antrean.
+- **Komentar** dengan balasan, suka komentar, dan menulis komentar atau balasan (saat masuk akun).
+- **SponsorBlock** per kategori: Lewati (dengan pudar suara dan Urungkan), Tanya (tombol Lewati),
+  Tampilkan di penggeser, atau Mati.
 
-- **Search** YouTube with no sign-in.
-- **Playback** up to 1080p, with video and audio fetched as separate streams through
-  generated DASH manifests (avoids YouTube's throttling).
-- **Player controls on the video:** skip ±10 s, a play/pause button that changes shape, a
-  draggable scrubber, and controls that auto-hide.
-- **Mini-player** that morphs into the player: the video grows out of the thumbnail. Swipe the
-  player down to minimize it (it follows your finger) or swipe the mini-player up to expand.
-- **Background audio** with a media notification; the mini-player shows the live video.
-- **Queue:** press and hold any video for Play next / Add to queue.
-- **Shorts:** a full-screen vertical feed (yours when signed in, a general one otherwise). Swipe
-  between shorts, tap to pause; the tab bar turns into a frosted-glass bar with Like, Comments,
-  Share and the channel (tap to subscribe). The next 10 unseen shorts are kept downloaded (about
-  100–150 MB of cache), so they start instantly even right after the app opens; each one is
-  forgotten once seen and the next is fetched in the background. Your regular video pauses and
-  comes back when you leave.
-- **SponsorBlock:** per category, Skip (with an audio fade and Undo), Ask (a Skip button), Show on the
-  scrubber, or Off. Settings are in the account sheet.
-- **Comments** with replies, a **quality picker** (Auto or any height YouTube offers, remembered),
-  and **landscape fullscreen** by rotating the phone or tapping the fullscreen button.
-- **Google sign-in (optional):** Home recommendations, subscriptions feed, history, Watch later,
-  liked videos and playlists. Likes, subscribes, Save and watch history sync to your account.
-  The session is stored encrypted with an Android Keystore key. Note: Google can suspend
-  accounts used with unofficial clients; a secondary account avoids risking your main one.
-- **Wallpaper colors** (Material You), Ledgii-style floating nav capsule, and no tap ripple.
+**Shorts**
+- Umpan vertikal layar penuh (milikmu saat masuk akun, umum jika tidak). Geser antar Short, ketuk
+  untuk jeda; bilah tab berubah jadi bilah kaca buram dengan Suka, Komentar, Bagikan, dan channel
+  (ketuk untuk berlangganan atau membuka channel).
+- 10 Short berikutnya yang belum dilihat disiapkan di perangkat, jadi langsung main.
+- **Dua tampilan:** layar penuh, atau kartu (kotak persegi selebar layar di bawah jam dan ikon
+  status, video utuh dengan latar buram, tanpa terpotong di sisi).
+- Shorts juga tampil sebagai rak di Beranda, dan bisa dimatikan di pengaturan.
 
-## Roadmap
+**Akun dan koleksi**
+- **Masuk dengan Google (opsional):** rekomendasi Beranda, umpan Langganan, riwayat, Tonton nanti,
+  video yang disukai, dan playlist. Suka, langganan, Simpan, dan riwayat tontonan tersinkron ke akun.
+  Sesi disimpan terenkripsi dengan kunci Android Keystore. Catatan: Google bisa menangguhkan akun
+  yang dipakai dengan klien tidak resmi; akun kedua lebih aman daripada akun utama.
+- **Koleksi:** Riwayat, Playlist, Tonton nanti, dan Video yang disukai. Tombol **Unduhan** ada di
+  bagian Playlist, tepat di atas Tonton nanti dan Video yang disukai.
+- **Unduhan:** simpan video untuk ditonton tanpa internet; Unduhan selalu bisa dibuka, juga saat
+  belum masuk akun atau sedang offline.
+- **Halaman channel** ala YouTube: @username, jumlah pelanggan, jumlah video, dan tab Video,
+  Shorts, Live, Playlist, serta Postingan komunitas.
+- **Notifikasi tanpa membuka aplikasi:** channel yang kamu langgan memberi notifikasi video baru,
+  siaran langsung, dan postingan, lengkap dengan gambar mini. Lonceng per channel juga tersedia.
+- **Halaman Notifikasi:** gabungan kotak masuk YouTube dan semua kabar terbaru dari channel yang
+  dilanggan (video, live, postingan), dikelompokkan Hari ini, Minggu ini, dan Lebih lama.
+- Penanda titik pada konten baru, dan tarik layar untuk menyegarkan.
 
-1. ✅ Shell, search, playback, overlay controls, mini-player, background audio
-2. ✅ Mini-player ↔ player morph; swipe down to minimize, swipe up to expand
-3. ✅ Comments, quality picker, landscape fullscreen
-4. ✅ Google sign-in with full sync
-5. ✅ Queue, comment posting, SponsorBlock, Castii-style tab bar
-6. ✅ Shorts tab
-7. Downloads, captions
+**Tampilan dan pengaturan**
+- **Warna mengikuti wallpaper** (Material You), pilihan tema warna, mode terang/gelap, kapsul
+  navigasi melayang, dan tanpa riak sentuh.
+- **Ikon aplikasi** di layar utama mengikuti tema yang dipilih (termasuk ikon gaya YouTube).
+- **Dua bahasa tampilan:** Indonesia dan Inggris; tanggal video mengikuti bahasa aplikasi.
+- **Wilayah dan bahasa konten:** pilihan negara saat pertama dibuka, bisa diubah di pengaturan.
+- **Tentang:** nama aplikasi, versi, developer, dan tautan dukungan.
+- **Pembaruan sendiri:** aplikasi mengecek rilis terbaru dan memasangnya.
+- Dukungan layar terbagi (split screen), jendela gelembung, dan tata letak kanan-ke-kiri (RTL).
 
-## Building
+## Peta jalan
 
-Requirements: Android SDK (compileSdk 36) and JDK 17+. Android Studio's bundled JDK works:
+1. ✅ Kerangka, pencarian, pemutaran, kontrol di atas video, mini-player, audio latar
+2. ✅ Transisi mini-player ke pemutar; geser bawah untuk memperkecil, geser atas untuk memperbesar
+3. ✅ Komentar, pilihan kualitas, layar penuh lanskap
+4. ✅ Masuk dengan Google dengan sinkronisasi penuh
+5. ✅ Antrean, menulis komentar, SponsorBlock, bilah tab ala Castii
+6. ✅ Tab Shorts
+7. ✅ Unduhan, subtitle, notifikasi latar belakang, halaman channel, siaran langsung
+
+## Membangun
+
+Kebutuhan: Android SDK (compileSdk 36) dan JDK 17+. JDK bawaan Android Studio bisa dipakai:
 
 ```sh
 export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
 ./gradlew assembleDebug      # app/build/outputs/apk/debug/app-debug.apk
-./gradlew assembleRelease    # shrunk with R8, signed with the debug key
+./gradlew assembleRelease    # diperkecil dengan R8, ditandatangani dengan kunci debug
 ```
 
-Judge smoothness on the **release** build; debug Compose runs unoptimized.
+Nilai kelancaran di build **release**; Compose di build debug berjalan tanpa optimasi.
 
-## Project layout
+## Struktur proyek
 
 ```
 app/src/main/java/com/decio/plaza/
-  YouTube.kt          search + video details (NewPipeExtractor), stream cache and selection
-  PlaybackService.kt  Media3 session service, DASH/merging media sources
-  PlayerState.kt      UI-side playback state over a MediaController
-  PlayerUi.kt         watch screen, overlay controls, scrubber, mini-player
-  MainActivity.kt     app shell: tabs, floating nav capsule, player sheet
-  Screens.kt          Home, Subscriptions, Search, Library
-  Shorts.kt           Shorts tab: feed, preloading player pool, frosted-glass bar
-  UiKit.kt            shared components and expressive shapes
+  YouTube.kt          pencarian + detail video (NewPipeExtractor), cache dan pemilihan aliran
+  PlaybackService.kt  layanan sesi Media3, sumber media DASH/penggabungan
+  PlayerState.kt      keadaan pemutaran sisi UI di atas MediaController
+  PlayerUi.kt         layar tonton, kontrol, penggeser, mini-player
+  MainActivity.kt     kerangka aplikasi: tab, kapsul navigasi, lembar pemutar
+  Screens.kt          Beranda, Langganan, Cari, Koleksi
+  Shorts.kt           tab Shorts: umpan, kumpulan pemutar yang dimuat lebih dulu, bilah kaca
+  Notifications.kt    halaman Notifikasi dan lencana lonceng
+  NewVideoAlerts.kt   notifikasi latar belakang (WorkManager)
+  Downloads.kt        Unduhan
+  UiKit.kt            komponen bersama dan bentuk ekspresif
   Theme.kt, Motion.kt, Net.kt
 docs/
-  design/             approved mockup (open mockup.html in a browser) and iterations
-  screens/            screenshots of the running app
-CLAUDE.md             product decisions and working rules for AI-assisted development
+  design/             mockup yang disetujui (buka mockup.html di browser) dan iterasinya
+CLAUDE.md             keputusan produk dan aturan kerja untuk pengembangan dibantu AI
 ```
 
-## Credits
+## Kredit
 
-- [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor): YouTube data, GPL-3.0
-- [AndroidX Media3](https://github.com/androidx/media): playback
-- [SponsorBlock](https://sponsor.ajay.app): sponsor segments, CC BY-NC-SA 4.0 (planned)
-- [essopsp](https://github.com/essopsp): the idea of a Shorts tab ([#10](https://github.com/deciocrytek/Skipii/pull/10))
-- [@o0ir4](https://www.threads.com/@o0ir4): reported the layout on Arabic (right-to-left) phones (0.5.64)
-- [nsk-47](https://github.com/nsk-47): found the gap under Appearance on large font sizes ([#24](https://github.com/deciocrytek/Skipii/issues/24), 0.5.65)
+- [NewPipeExtractor](https://github.com/TeamNewPipe/NewPipeExtractor): data YouTube, GPL-3.0
+- [AndroidX Media3](https://github.com/androidx/media): pemutaran
+- [SponsorBlock](https://sponsor.ajay.app): segmen sponsor, CC BY-NC-SA 4.0
+- [essopsp](https://github.com/essopsp): ide tab Shorts
+- [@o0ir4](https://www.threads.com/@o0ir4): melaporkan tata letak di HP berbahasa Arab (kanan-ke-kiri)
+- [nsk-47](https://github.com/nsk-47): menemukan celah di bawah Tampilan pada ukuran huruf besar
 
-## License
+## Lisensi
 
-GPL-3.0. See [LICENSE](LICENSE). Required because NewPipeExtractor is GPL-3.0.
+GPL-3.0. Lihat [LICENSE](LICENSE). Wajib karena NewPipeExtractor berlisensi GPL-3.0.
 
-Plaza is not affiliated with or endorsed by YouTube or Google. It's a personal project for
-sideloading, not distributed through the Play Store.
+Plaza tidak berafiliasi dengan atau didukung oleh YouTube maupun Google. Ini proyek pribadi untuk
+dipasang manual (sideload), tidak didistribusikan lewat Play Store.
 
-## About
+## Tentang
 
-Plaza 2.0.0, by Hanz Dev Official.
+Plaza 4.0.0, oleh Hanz Dev Official.
 
-- Support: https://saweria.co/hanzreally
+- Dukungan: https://saweria.co/hanzreally
 - Email: hanzzcodee@gmail.com
-
-Plaza is based on [Skipii](https://github.com/deciocrytek/Skipii) by deciocrytek and is released under the
-same license (GPL-3.0, see `LICENSE`). Names, package and settings screens were changed.
