@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Latar ikon aplikasi per tema (AppIcon.kt). -->
+    <color name="icon_bg_youtube">#FFFFFF</color>
+    <color name="icon_bg_creamrose">#EED6DF</color>
+    <color name="icon_bg_erica">#E7DCFF</color>
+    <color name="icon_bg_lilacair">#EFE7FB</color>
+    <color name="icon_bg_jai">#FFD3E4</color>
+    <color name="icon_bg_pumpkin">#FBE2CE</color>
+    <color name="icon_bg_moonstone">#E4E5E7</color>
+    <color name="icon_bg_iris">#E0DAF1</color>
+    <color name="icon_bg_harbor">#D4DBF7</color>
+</resources>
