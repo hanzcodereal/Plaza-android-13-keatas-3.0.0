@@ -15,8 +15,8 @@ android {
         applicationId = "com.plaza"
         minSdk = 26
         targetSdk = 36
-        versionCode = 300
-        versionName = "3.0.0"
+        versionCode = 400
+        versionName = "4.0.0"
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
     }
 
