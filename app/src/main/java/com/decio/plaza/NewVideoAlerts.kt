@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -73,7 +74,9 @@ object NewVideoAlerts {
 
     private const val PREFS = "new_video_alerts"
     private const val KEY_IDS = "channels"
-    private const val CHANNEL = "new_videos"
+    // Saluran baru (penting/heads-up) supaya notifikasi benar-benar muncul sendiri; saluran lama dihapus.
+    private const val CHANNEL = "channel_updates"
+    private const val LEGACY_CHANNEL = "new_videos"
     private const val WORK = "new-video-check"
     private var prefs: SharedPreferences? = null
     private var appContext: Context? = null
@@ -116,8 +119,10 @@ object NewVideoAlerts {
     private fun schedule(context: Context) {
         val request = PeriodicWorkRequestBuilder<NewVideoWorker>(15, TimeUnit.MINUTES)
             .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setBackoffCriteria(BackoffPolicy.LINEAR, 5, TimeUnit.MINUTES)
             .build()
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.KEEP, request)
+        // UPDATE: jadwal dari versi sebelumnya diganti, jadi perbaikan ikut berlaku tanpa pasang ulang.
+        WorkManager.getInstance(context).enqueueUniquePeriodicWork(WORK, ExistingPeriodicWorkPolicy.UPDATE, request)
     }
 
     /** Satu putaran pemeriksaan semua channel berlonceng. */
@@ -131,31 +136,100 @@ object NewVideoAlerts {
             p.edit().putLong("seen_$id", fresh.maxOf { it.published }).apply()
             fresh.takeLast(3).forEach { notify(context, it) }
         }
-        checkSubscriptions(context)
+        // Satu bagian gagal tidak boleh menghentikan yang lain.
+        runCatching { checkSubscriptions(context) }
+        runCatching { checkInbox(context) }
+        Unit
     }
 
     private const val KEY_SUB_SEEN = "sub_seen"
-    private val RECENT = Regex("(?i)\\b(second|minute|hour|detik|menit|jam|just now|baru saja)")
+    private const val KEY_INBOX_SEEN = "inbox_seen"
+    private const val KEY_NOTIFIED = "notified"
+
+    /** Umur teks "2 jam yang lalu" dalam batas 3 hari (atau tidak terbaca): hanya yang baru yang diberitahukan. */
+    private fun isRecent(ago: String?): Boolean {
+        val minutes = NotificationsApi.agoMinutes(ago)
+        return minutes == Long.MAX_VALUE || minutes <= 3 * 1_440L
+    }
+
+    /** True kalau [key] belum pernah diberitahukan; mencegah notifikasi ganda antar sumber (RSS, feed, kotak masuk). */
+    private fun claim(key: String): Boolean {
+        val p = prefs ?: return true
+        return synchronized(this) {
+            val done = p.getStringSet(KEY_NOTIFIED, emptySet()).orEmpty()
+            if (key in done) {
+                false
+            } else {
+                p.edit().putStringSet(KEY_NOTIFIED, (listOf(key) + done).take(300).toSet()).apply()
+                true
+            }
+        }
+    }
 
     /**
-     * Masuk dengan akun: satu permintaan ke feed Langganan memberi tahu video baru dan siaran
-     * langsung dari semua channel yang diikuti, tanpa aplikasi dibuka. Putaran pertama hanya
-     * mencatat apa yang sudah ada.
+     * Masuk dengan akun: satu permintaan ke feed Langganan memberi tahu video baru, siaran langsung,
+     * dan postingan komunitas dari semua channel yang diikuti, tanpa aplikasi dibuka. Putaran
+     * pertama hanya mencatat apa yang sudah ada.
      */
     private suspend fun checkSubscriptions(context: Context) {
         val p = prefs ?: return
         if (!Account.signedIn) return
         val page = runCatching { InnerTube.subscriptionsFeed() }.getOrNull() ?: return
-        val ids = page.videos.map { it.id }
+        if (page.videos.isEmpty() && page.posts.isEmpty()) return
+        val ids = page.videos.map { it.id } + page.posts.map { "post:" + it.id }
         val seen = p.getStringSet(KEY_SUB_SEEN, null)
         if (seen == null) {
             p.edit().putStringSet(KEY_SUB_SEEN, ids.toSet()).apply()
             return
         }
-        val fresh = page.videos.filter { it.id !in seen && (it.live || (it.uploaded != null && RECENT.containsMatchIn(it.uploaded))) }
+        val freshVideos = page.videos.filter { it.id !in seen && (it.live || isRecent(it.uploaded)) }
+        val freshPosts = page.posts.filter { "post:" + it.id !in seen && isRecent(it.ago) }
         p.edit().putStringSet(KEY_SUB_SEEN, (ids + seen).take(400).toSet()).apply()
-        fresh.take(3).forEach { v ->
-            show(context, v.id, v.title, v.channel, v.channelUrl?.substringAfterLast('/'), v.live)
+        freshVideos.take(5).forEach { v ->
+            show(
+                context, key = v.id,
+                heading = v.channel.ifBlank { "Plaza" },
+                body = if (v.live) tr("Live now") + ": " + v.title else v.title,
+                videoId = v.id, videoTitle = v.title, author = v.channel,
+                channelId = v.channelUrl?.substringAfterLast('/')?.takeIf { it.startsWith("UC") },
+                imageUrl = "https://i.ytimg.com/vi/${v.id}/hqdefault.jpg",
+            )
+        }
+        freshPosts.take(3).forEach { post ->
+            show(
+                context, key = "post:" + post.id,
+                heading = post.author.orEmpty().ifBlank { "Plaza" },
+                body = tr("Posted") + ": " + post.text.replace('\n', ' ').take(160),
+                videoId = null, imageUrl = post.image,
+            )
+        }
+    }
+
+    /**
+     * Kotak masuk notifikasi akun YouTube (video baru, live, postingan, balasan, sebutan dari channel
+     * yang diikuti): yang belum pernah muncul diberitahukan, juga tanpa aplikasi dibuka.
+     */
+    private suspend fun checkInbox(context: Context) {
+        val p = prefs ?: return
+        if (!Account.signedIn) return
+        val list = runCatching { NotificationsApi.inbox() }.getOrNull() ?: return
+        if (list.isEmpty()) return
+        val ids = list.map { it.id }
+        val seen = p.getStringSet(KEY_INBOX_SEEN, null)
+        if (seen == null) {
+            p.edit().putStringSet(KEY_INBOX_SEEN, ids.toSet()).apply()
+            return
+        }
+        val fresh = list.filter { it.id !in seen && it.minutesAgo <= 3 * 1_440L }
+        p.edit().putStringSet(KEY_INBOX_SEEN, (ids + seen).take(400).toSet()).apply()
+        fresh.take(5).forEach { n ->
+            show(
+                context, key = n.videoId ?: "inbox:" + n.id,
+                heading = n.name.ifBlank { "Plaza" },
+                body = n.text,
+                videoId = n.videoId, videoTitle = n.text.substringAfter(": ", n.text), author = n.name,
+                imageUrl = n.thumbnail ?: n.videoId?.let { "https://i.ytimg.com/vi/$it/hqdefault.jpg" },
+            )
         }
     }
 
@@ -194,11 +268,15 @@ object NewVideoAlerts {
         return out
     }
 
-    private fun notify(context: Context, e: FeedEntry) = show(context, e.videoId, e.title, e.author, e.channelId, false)
+    private fun notify(context: Context, e: FeedEntry) = show(
+        context, key = e.videoId, heading = e.author.ifBlank { "Plaza" }, body = e.title,
+        videoId = e.videoId, videoTitle = e.title, author = e.author, channelId = e.channelId,
+        imageUrl = "https://i.ytimg.com/vi/${e.videoId}/hqdefault.jpg",
+    )
 
-    private fun thumbnail(videoId: String): Bitmap? = try {
+    private fun picture(url: String): Bitmap? = try {
         val request = okhttp3.Request.Builder()
-            .url("https://i.ytimg.com/vi/$videoId/hqdefault.jpg")
+            .url(url)
             .header("User-Agent", Net.USER_AGENT)
             .build()
         Net.client.newCall(request).execute().use { r ->
@@ -208,32 +286,48 @@ object NewVideoAlerts {
         null
     }
 
-    private fun show(context: Context, videoId: String, title: String, author: String, channelId: String?, live: Boolean) {
+    /** Menampilkan satu notifikasi; [videoId] null = hanya membuka aplikasi (postingan, balasan). */
+    private fun show(
+        context: Context,
+        key: String,
+        heading: String,
+        body: String,
+        videoId: String?,
+        videoTitle: String = "",
+        author: String = "",
+        channelId: String? = null,
+        imageUrl: String? = null,
+    ) {
+        if (!claim(key)) return
         if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) return
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
-        manager.createNotificationChannel(NotificationChannel(CHANNEL, tr("New videos"), NotificationManager.IMPORTANCE_DEFAULT))
+        manager.deleteNotificationChannel(LEGACY_CHANNEL)
+        manager.createNotificationChannel(NotificationChannel(CHANNEL, tr("Channel updates"), NotificationManager.IMPORTANCE_HIGH))
         val open = Intent(context, MainActivity::class.java).apply {
-            action = ACTION_OPEN
-            putExtra(EXTRA_ID, videoId)
-            putExtra(EXTRA_TITLE, title)
-            putExtra(EXTRA_CHANNEL, author)
-            putExtra(EXTRA_CHANNEL_ID, channelId)
+            if (videoId != null) {
+                action = ACTION_OPEN
+                putExtra(EXTRA_ID, videoId)
+                putExtra(EXTRA_TITLE, videoTitle)
+                putExtra(EXTRA_CHANNEL, author)
+                putExtra(EXTRA_CHANNEL_ID, channelId)
+            }
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val pending = PendingIntent.getActivity(
-            context, videoId.hashCode(), open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            context, key.hashCode(), open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val text = if (live) tr("Live now") + ": " + title else title
         val builder = NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(author.ifBlank { "Plaza" })
-            .setContentText(text)
+            .setContentTitle(heading)
+            .setContentText(body)
             .setContentIntent(pending)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setAutoCancel(true)
-        val picture = thumbnail(videoId)
-        if (picture != null) builder.setStyle(NotificationCompat.BigPictureStyle().bigPicture(picture).setSummaryText(text))
-        else builder.setStyle(NotificationCompat.BigTextStyle().bigText(text))
-        manager.notify(videoId.hashCode(), builder.build())
+        val image = imageUrl?.let { picture(it) }
+        if (image != null) builder.setStyle(NotificationCompat.BigPictureStyle().bigPicture(image).setSummaryText(body))
+        else builder.setStyle(NotificationCompat.BigTextStyle().bigText(body))
+        manager.notify(key.hashCode(), builder.build())
     }
 }
 

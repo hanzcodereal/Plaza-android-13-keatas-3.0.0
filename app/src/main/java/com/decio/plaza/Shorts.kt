@@ -1156,11 +1156,10 @@ fun ShortsScreen(shorts: ShortsState, progress: () -> Float, overlayBottom: Dp) 
         Box(
             Modifier
                 .fillMaxSize()
-                // Mode kartu: video tidak sampai ke tepi layar; sudut membulat, ada margin, dan ruang untuk navigasi.
+                // Mode kartu: kotak persegi selebar layar, mulai di bawah jam dan ikon status, berhenti di atas navigasi;
+                // tanpa sudut membulat dan tanpa margin samping.
                 .then(
-                    if (card) Modifier.statusBarsPadding()
-                        .padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = overlayBottom + 6.dp)
-                        .clip(RoundedCornerShape(26.dp))
+                    if (card) Modifier.statusBarsPadding().padding(bottom = overlayBottom)
                     else Modifier,
                 )
                 // The picture settles in as the bar turns to glass.
@@ -1243,6 +1242,8 @@ private fun ShortPage(shorts: ShortsState, page: Int, overlayBottom: Dp) {
     val failure = shorts.failed[item.id]
     val aspect = shorts.aspects[item.id] ?: details?.aspect ?: (9f / 16f)
     val onScreen = shorts.index == page
+    // Mode kartu (bukan layar penuh): kotak persegi dengan video utuh. Mode layar penuh tidak berubah.
+    val card = !ShortsLayout.fullscreen
     DisposableEffect(page) { onDispose { shorts.forgetPage(page) } }
     Box(
         Modifier
@@ -1251,11 +1252,23 @@ private fun ShortPage(shorts: ShortsState, page: Int, overlayBottom: Dp) {
             .pointerInputTap(page) { if (shorts.index == page) shorts.togglePause() },
     ) {
         Box(Modifier.fillMaxSize().clipToBounds()) {
-            // Vertical shorts fill the screen (a little cropped at the sides); wider ones fit its width.
+            // Mode layar penuh: seperti semula (Short vertikal memenuhi layar, yang lebih lebar muat selebar layar).
+            // Mode kartu: video tampil utuh, tidak dipotong di sisi, dengan latar dari bingkai video yang
+            // dibentangkan, buram, dan digelapkan.
+            if (card) {
+                AsyncImage(
+                    model = coil.request.ImageRequest.Builder(LocalContext.current).data(item.thumbnail).size(40, 72).build(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    filterQuality = FilterQuality.Low,
+                    modifier = Modifier.fillMaxSize(),
+                )
+                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)))
+            }
             Box(
                 Modifier
                     .fillMaxSize()
-                    .aspectFit(aspect, cover = aspect < 0.7f)
+                    .aspectFit(aspect, cover = aspect < 0.7f && !card)
                     .onGloballyPositioned { shorts.videoRects[page] = Rect(it.positionInRoot(), it.size.toSize()) },
             ) {
                 AsyncImage(model = item.thumbnail, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())

@@ -247,9 +247,9 @@ fun LibraryScreen(
             topPadding = top,
         ) {
         LazyColumn(state = rememberScrollToTop(scrollToTop), contentPadding = contentPadding.withTop(top)) {
-            // Unduhan selalu ada (juga sebelum masuk dan saat offline).
-            item(key = "downloadsTile") { DownloadsTile(onOpenDownloads) }
             if (!signedIn) {
+                // Unduhan selalu ada (juga sebelum masuk dan saat offline).
+                item(key = "downloadsTile") { DownloadsTile(onOpenDownloads) }
                 item {
                     EmptyState(
                         icon = Icons.Rounded.VideoLibrary,
@@ -286,6 +286,8 @@ fun LibraryScreen(
                 }
             }
             item(key = "playlistsTitle") { SectionTitle(tr("Playlists")) }
+            // Unduhan ada di bagian Playlist, tepat di atas Tonton nanti dan Video yang disukai.
+            item(key = "downloadsTile") { DownloadsTile(onOpenDownloads) }
             val pinned = listOf(
                 PlaylistRef("WL", tr("Watch later"), null, null),
                 PlaylistRef("LL", tr("Liked videos"), null, null),

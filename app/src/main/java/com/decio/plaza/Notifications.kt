@@ -96,6 +96,8 @@ data class AppNotification(
     val videoId: String?,
     val minutesAgo: Long,
     val isMention: Boolean,
+    /** Id channel (UC…) kalau diketahui; dipakai untuk membuka channel dari baris tanpa video (postingan). */
+    val channelId: String? = null,
 )
 
 internal object NotificationsApi {
@@ -134,6 +136,51 @@ internal object NotificationsApi {
             }
         }
         out.values.toList()
+    }
+
+    /**
+     * Semua kabar terbaru dari channel yang dilanggan, dari feed Langganan: video baru, siaran live,
+     * dan postingan komunitas. Melengkapi kotak masuk YouTube, yang hanya memuat channel berlonceng.
+     */
+    suspend fun subscriptionUpdates(): List<AppNotification> = withContext(Dispatchers.IO) {
+        val page = InnerTube.subscriptionsFeed()
+        val out = ArrayList<AppNotification>()
+        page.videos.take(40).forEach { v ->
+            out += AppNotification(
+                id = "sub:" + v.id,
+                name = v.channel,
+                text = (if (v.live) tr("Live now") else tr("Uploaded")) + ": " + v.title,
+                ago = v.uploaded,
+                avatar = v.avatar,
+                thumbnail = v.thumbnail,
+                videoId = v.id,
+                minutesAgo = if (v.live) 0L else agoMinutes(v.uploaded),
+                isMention = false,
+                channelId = v.channelUrl?.substringAfterLast('/')?.takeIf { it.startsWith("UC") },
+            )
+        }
+        page.posts.take(15).forEach { post ->
+            out += AppNotification(
+                id = "post:" + post.id,
+                name = post.author.orEmpty(),
+                text = tr("Posted") + ": " + post.text.replace('\n', ' ').take(160),
+                ago = post.ago,
+                avatar = post.authorAvatar,
+                thumbnail = post.image,
+                videoId = null,
+                minutesAgo = agoMinutes(post.ago),
+                isMention = false,
+                channelId = post.authorId?.takeIf { it.startsWith("UC") },
+            )
+        }
+        out
+    }
+
+    /** Kotak masuk + kabar langganan jadi satu daftar, yang terbaru di atas; video yang sama tidak tampil dua kali. */
+    fun merge(inbox: List<AppNotification>, updates: List<AppNotification>): List<AppNotification> {
+        val taken = inbox.mapNotNull { it.videoId }.toSet()
+        val extra = updates.filter { it.videoId == null || it.videoId !in taken }
+        return (inbox + extra).sortedBy { it.minutesAgo }
     }
 
     private fun lastUrl(arr: JSONArray?): String? =
@@ -192,9 +239,16 @@ object Notifications {
         if (!Account.signedIn || loading) return
         loading = true
         error = null
-        runCatching { NotificationsApi.inbox() }
-            .onSuccess { items = it; unseen = 0 }
-            .onFailure { error = YouTube.friendlyError(it) }
+        // Dua sumber: kotak masuk YouTube dan feed Langganan; satu gagal, yang lain tetap tampil.
+        val inbox = runCatching { NotificationsApi.inbox() }
+        val updates = runCatching { NotificationsApi.subscriptionUpdates() }
+        val failure = inbox.exceptionOrNull()
+        if (failure != null && updates.isFailure) {
+            error = YouTube.friendlyError(failure)
+        } else {
+            items = NotificationsApi.merge(inbox.getOrNull().orEmpty(), updates.getOrNull().orEmpty())
+            unseen = 0
+        }
         loading = false
     }
 }
@@ -254,6 +308,7 @@ fun NotificationsScreen(contentPadding: PaddingValues, onBack: () -> Unit, onOpe
     val all = Notifications.items
     val shown = all?.filter { !mentionsOnly || it.isMention }
     val menu = LocalVideoMenu.current
+    val openChannel = LocalChannelOpener.current
     Column(Modifier.fillMaxSize().background(c.surface).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(48.dp).pressable(onClick = onBack), contentAlignment = Alignment.Center) {
@@ -304,11 +359,19 @@ fun NotificationsScreen(contentPadding: PaddingValues, onBack: () -> Unit, onOpe
                         items(list, key = { it.id }) { n ->
                             val video = n.videoId?.let {
                                 VideoItem(
-                                    id = it, title = n.text.substringAfter(": ", n.text), channel = n.name, channelUrl = null,
+                                    id = it, title = n.text.substringAfter(": ", n.text), channel = n.name,
+                                    channelUrl = n.channelId?.let { id -> "https://www.youtube.com/channel/$id" },
                                     thumbnail = n.thumbnail, avatar = n.avatar, durationSec = 0, views = -1, uploaded = n.ago,
                                 )
                             }
-                            NotificationRow(n, onClick = { video?.let(onOpen) }, onMenu = { video?.let(menu) })
+                            NotificationRow(
+                                n,
+                                onClick = {
+                                    if (video != null) onOpen(video)
+                                    else n.channelId?.let { id -> openChannel("https://www.youtube.com/channel/$id") }
+                                },
+                                onMenu = { video?.let(menu) },
+                            )
                         }
                     }
                 }
