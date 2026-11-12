@@ -99,6 +99,7 @@ fun HomeScreen(
     val signedIn = Account.signedIn
     // lib.version: setelah ganti akun, daftar dimuat ulang (reset terjadi setelah masuk selesai).
     LaunchedEffect(signedIn, lib.version) { if (signedIn) lib.home.ensureLoaded() }
+    LaunchedEffect(signedIn, lib.version) { lib.categories.select(null) }
     CollapsingHeaderLayout(
         resetKey = scrollToTop to lib.home.generation,
         header = {
@@ -111,10 +112,11 @@ fun HomeScreen(
         },
     ) { top ->
         val cats = lib.categories
-        if (cats.selected != null) {
-            // Kategori dipilih: hasil pencarian YouTube untuk kategori itu (juga tanpa masuk akun).
+        val chips = homeChips(lib.home.chips)
+        if (signedIn && cats.selected != null) {
+            // Chip dipilih: feed asli YouTube yang sudah disaring (Musik, Berita, Live, …), bukan hasil pencarian.
             LazyColumn(contentPadding = contentPadding.withTop(top)) {
-                item(key = "homeChips") { CategoryChips(cats) }
+                item(key = "homeChips") { CategoryChips(cats, chips) }
                 when {
                     cats.error != null && cats.results.isEmpty() -> item {
                         EmptyState(
@@ -129,15 +131,30 @@ fun HomeScreen(
                             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 4.dp, modifier = Modifier.size(32.dp))
                         }
                     }
-                    else -> items(cats.results, key = { it.id }) { v -> VideoCard(v, onClick = { onOpen(v) }) }
+                    cats.results.isEmpty() -> item {
+                        EmptyState(
+                            icon = Icons.Rounded.Subscriptions,
+                            title = tr("Nothing here yet"),
+                            body = "",
+                            action = { PillButton(tr("Try again"), { cats.retry() }) },
+                        )
+                    }
+                    else -> {
+                        items(cats.results, key = { it.id }) { v -> VideoCard(v, onClick = { onOpen(v) }) }
+                        if (cats.next != null) item(key = "chipMore") {
+                            LaunchedEffect(cats.next) { cats.loadMore() }
+                            Box(Modifier.fillMaxWidth().padding(28.dp), Alignment.Center) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 4.dp, modifier = Modifier.size(32.dp))
+                            }
+                        }
+                    }
                 }
             }
         } else if (signedIn) {
-            FeedList(lib.home, contentPadding.withTop(top), onOpen, header = { item(key = "homeChips") { CategoryChips(cats) } }, scrollToTop = scrollToTop, indicatorTop = top, showShorts = ShortsSetting.enabled, showLive = true, showPosts = true, onOpenShort = onOpenShort, onDownloads = onOpenDownloads,
+            FeedList(lib.home, contentPadding.withTop(top), onOpen, header = { item(key = "homeChips") { CategoryChips(cats, chips) } }, scrollToTop = scrollToTop, indicatorTop = top, showShorts = ShortsSetting.enabled, showLive = true, showPosts = true, onOpenShort = onOpenShort, onDownloads = onOpenDownloads,
                 emptyBody = tr("YouTube has no recommendations for this account yet. Watch a few videos, then try again."))
         } else {
             LazyColumn(contentPadding = contentPadding.withTop(top)) {
-                item(key = "homeChips") { CategoryChips(cats) }
                 item {
                     EmptyState(
                         icon = Icons.Rounded.Subscriptions,
@@ -436,10 +453,8 @@ private fun TextLink(text: String, onClick: () -> Unit) {
 /** Lives above the tab switcher so results survive switching tabs. */
 @Stable
 class HomeCategories(private val scope: CoroutineScope) {
-    /** Kunci terjemahan; teks yang tampil juga dipakai sebagai kata pencarian di YouTube. */
-    val keys = listOf("Latest news", "Trending", "Music", "Gaming", "Sports")
-    /** null = Semua (feed Beranda biasa). */
-    var selected by mutableStateOf<String?>(null)
+    /** Chip yang sedang dipilih; null = Semua (feed Beranda biasa). */
+    var selected by mutableStateOf<FeedChip?>(null)
         private set
     var results by mutableStateOf<List<VideoItem>>(emptyList())
         private set
@@ -447,46 +462,79 @@ class HomeCategories(private val scope: CoroutineScope) {
         private set
     var error by mutableStateOf<String?>(null)
         private set
-    private val cache = HashMap<String, List<VideoItem>>()
+    var next by mutableStateOf<String?>(null)
+        private set
     private var job: Job? = null
 
-    fun select(key: String?) {
-        selected = key
+    /** Memuat feed asli YouTube untuk chip itu (token halaman dari chip, bukan pencarian). */
+    fun select(chip: FeedChip?) {
+        selected = chip
         job?.cancel()
         error = null
-        if (key == null) { loading = false; return }
-        val cached = cache[key]
-        if (cached != null) { results = cached; loading = false; return }
         results = emptyList()
+        next = null
+        if (chip == null) { loading = false; return }
         loading = true
         job = scope.launch {
-            runCatching { YouTube.search(tr(key)) }
-                .onSuccess { list ->
-                    val unique = list.distinctBy { it.id }
-                    cache[key] = unique
-                    if (selected == key) results = unique
+            runCatching { InnerTube.browse("FEwhat_to_watch", chip.token) }
+                .onSuccess { page ->
+                    if (selected == chip) { results = page.videos; next = page.next }
                 }
-                .onFailure { if (selected == key) error = YouTube.friendlyError(it) }
-            if (selected == key) loading = false
+                .onFailure { if (selected == chip) error = YouTube.friendlyError(it) }
+            if (selected == chip) loading = false
         }
     }
 
-    fun retry() {
-        val key = selected ?: return
-        cache.remove(key)
-        select(key)
+    fun loadMore() {
+        val chip = selected ?: return
+        val token = next ?: return
+        if (loading) return
+        loading = true
+        job = scope.launch {
+            runCatching { InnerTube.browse("FEwhat_to_watch", token) }
+                .onSuccess { page ->
+                    if (selected == chip) {
+                        val seen = results.mapTo(HashSet()) { it.id }
+                        results = results + page.videos.filter { seen.add(it.id) }
+                        next = page.next
+                    }
+                }
+                .onFailure { if (selected == chip) next = null }
+            if (selected == chip) loading = false
+        }
     }
+
+    fun retry() = select(selected)
+}
+
+/** Chip bawaan YouTube yang ditampilkan, urut: Musik, Berita, Live, Kartun, Baru diupload, Baru untuk Anda (nama sesuai bahasa). */
+private val HOME_CHIP_ORDER = listOf(
+    setOf("music", "musik"),
+    setOf("news", "berita"),
+    setOf("live", "langsung"),
+    setOf("cartoons", "cartoon", "kartun"),
+    setOf("recently uploaded", "baru diupload", "baru diunggah", "baru saja diupload"),
+    setOf("new to you", "baru untuk anda", "baru untuk kamu"),
+)
+
+/** Dari chip yang YouTube kirim, ambil yang dipilih di atas; kalau tak satu pun cocok (bahasa lain), tampilkan chip aslinya. */
+private fun homeChips(all: List<FeedChip>): List<FeedChip> {
+    val picked = HOME_CHIP_ORDER.mapNotNull { names -> all.firstOrNull { it.label.trim().lowercase() in names } }
+    return picked.ifEmpty { all.take(8) }
 }
 
 @Composable
-private fun CategoryChips(cats: HomeCategories) {
+private fun CategoryChips(cats: HomeCategories, chips: List<FeedChip>) {
+    if (chips.isEmpty()) return
     LazyRow(
         contentPadding = PaddingValues(horizontal = 16.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
     ) {
         item(key = "all") { CategoryChip(tr("All"), cats.selected == null) { cats.select(null) } }
-        items(cats.keys, key = { it }) { key -> CategoryChip(tr(key), cats.selected == key) { cats.select(key) } }
+        items(chips, key = { it.token }) { chip ->
+            CategoryChip(chip.label, cats.selected?.token == chip.token) { cats.select(chip) }
+        }
     }
 }
 

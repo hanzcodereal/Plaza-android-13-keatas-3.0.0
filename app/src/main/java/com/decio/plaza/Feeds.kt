@@ -74,6 +74,9 @@ class FeedState(
     /** Postingan komunitas yang menyertai feed (Beranda). */
     var posts by mutableStateOf<List<ChannelPost>>(emptyList())
         private set
+    /** Chip penyaring asli dari YouTube di atas feed Beranda (halaman pertama). */
+    var chips by mutableStateOf<List<FeedChip>>(emptyList())
+        private set
     /** Siaran langsung untuk rak Live di Beranda. */
     var live by mutableStateOf<List<VideoItem>>(emptyList())
         private set
@@ -111,6 +114,7 @@ class FeedState(
                     videos = it.videos; next = it.next; generation++
                     if (it.shorts.isNotEmpty()) shorts = it.shorts
                     if (it.posts.isNotEmpty()) posts = it.posts
+                    if (it.chips.isNotEmpty()) chips = it.chips
                     liveLoader?.let { load -> launch { runCatching { load() }.onSuccess { l -> if (l.isNotEmpty()) live = l } } }
                     if (freshOnRefresh) it.videos.forEach { v -> shown += v.id }
                     it.videos.take(prefetchTop).forEach { v -> StreamCache.prefetch(v.id) }
@@ -173,7 +177,7 @@ class FeedState(
             pages++
         }
         if (fresh.isEmpty()) return first
-        return FeedPage(fresh.values.toList(), token, first.shorts, first.posts)
+        return FeedPage(fresh.values.toList(), token, first.shorts, first.posts, first.chips)
     }
 
     /** Membuang video dari daftar sekarang juga (mis. channel yang baru dihentikan langganannya). */
@@ -185,7 +189,7 @@ class FeedState(
     fun reset() {
         job?.cancel()
         shown.clear()
-        videos = emptyList(); shorts = emptyList(); posts = emptyList(); live = emptyList(); next = null; loaded = false; loading = false; error = null
+        videos = emptyList(); shorts = emptyList(); posts = emptyList(); chips = emptyList(); live = emptyList(); next = null; loaded = false; loading = false; error = null
     }
 
     private companion object {
@@ -205,7 +209,7 @@ class LibraryData(scope: CoroutineScope) {
     val home = FeedState(scope, prefetchTop = 2, freshOnRefresh = true, liveLoader = { InnerTube.liveNow() }) { InnerTube.homeOrFallback(it) }
     /** Channel yang baru dihentikan langganannya; disaring dari feed dan daftar sampai YouTube menyusul. */
     private val unsubscribed = HashSet<String>()
-    /** Kategori di Beranda (Berita terkini, Trending, Musik, Gaming, Olahraga). */
+    /** Chip kategori di Beranda (Musik, Berita, Live, …): data asli dari YouTube. */
     val categories = HomeCategories(scope)
     // Rak Live: siaran langsung dari channel yang dilanggan (diambil dari feed Langganan).
     val subscriptions = FeedState(scope, prefetchTop = 2, liveLoader = { InnerTube.subscriptionsFeed().videos.filter { it.live } }) { token ->

@@ -32,7 +32,18 @@ data class ChannelRef(val id: String, val name: String, val avatar: String?)
 
 /** One page of a feed plus the token for the next page, if any. */
 @Immutable
-data class FeedPage(val videos: List<VideoItem>, val next: String?, val shorts: List<VideoItem> = emptyList(), val posts: List<ChannelPost> = emptyList())
+data class FeedPage(
+    val videos: List<VideoItem>,
+    val next: String?,
+    val shorts: List<VideoItem> = emptyList(),
+    val posts: List<ChannelPost> = emptyList(),
+    /** Chip penyaring bawaan YouTube di atas feed (Musik, Berita, Live, …), tiap chip dengan token halamannya. */
+    val chips: List<FeedChip> = emptyList(),
+)
+
+/** Satu chip penyaring beranda dari YouTube; [token] memuat feed yang sudah disaring. */
+@Immutable
+data class FeedChip(val label: String, val token: String)
 
 /** Isi halaman channel: username @, jumlah video, dan tab yang dimiliki channel (jenis → params). */
 @Immutable
@@ -279,11 +290,11 @@ object InnerTube {
         val general = runCatching {
             withContext(Dispatchers.IO) { parseFeed(post("browse", JSONObject().put("browseId", "FEwhat_to_watch"), anonymous = true)) }
         }.getOrNull()
-        if (general != null && general.videos.isNotEmpty()) return general.copy(next = null)
+        if (general != null && general.videos.isNotEmpty()) return general.copy(next = null, chips = emptyList())
         val popular = runCatching {
             withContext(Dispatchers.IO) { parseFeed(post("search", JSONObject().put("query", "video populer hari ini"), anonymous = true)) }
         }.getOrNull()
-        return popular?.takeIf { it.videos.isNotEmpty() }?.copy(next = null) ?: own
+        return popular?.takeIf { it.videos.isNotEmpty() }?.copy(next = null, chips = emptyList()) ?: own
     }
 
     /** Siaran langsung yang sedang berlangsung (pencarian dengan filter "Live"), tanpa perlu akun. */
@@ -900,9 +911,16 @@ object InnerTube {
         val videos = LinkedHashMap<String, VideoItem>()
         val shorts = LinkedHashMap<String, VideoItem>()
         val posts = LinkedHashMap<String, ChannelPost>()
+        val chips = ArrayList<FeedChip>()
         var next: String? = null
         root.walk { key, obj ->
             when (key) {
+                "chipCloudChipRenderer" -> {
+                    val label = obj.text("text").orEmpty()
+                    val token = obj.optJSONObject("navigationEndpoint")?.optJSONObject("continuationCommand")
+                        ?.optString("token")?.ifBlank { null }
+                    if (label.isNotBlank() && token != null && !obj.optBoolean("isSelected")) chips += FeedChip(label, token)
+                }
                 "backstagePostRenderer", "postRenderer" -> obj.optString("postId").takeIf { it.isNotBlank() }?.let { id -> posts.getOrPut(id) { parsePost(id, obj) } }
                 "reelItemRenderer", "shortsLockupViewModel" -> parseShortCard(key, obj)?.let { shorts.putIfAbsent(it.id, it) }
                 // Members-only videos can't be played (anonymous extraction), and full movies/TV
@@ -918,7 +936,7 @@ object InnerTube {
                     obj.collectStrings("token").firstOrNull()?.let { next = it }
             }
         }
-        return FeedPage(videos.values.toList(), next, shorts.values.toList(), posts.values.toList())
+        return FeedPage(videos.values.toList(), next, shorts.values.toList(), posts.values.toList(), chips)
     }
 
     /** Kartu Short di feed atau tab Shorts channel: renderer lama (reelItemRenderer) atau baru (shortsLockupViewModel). */
