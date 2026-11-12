@@ -45,6 +45,22 @@ data class FeedPage(
 @Immutable
 data class FeedChip(val label: String, val token: String)
 
+/** Pembuat sebuah Short: nama channel, foto profil, dan id channel (feed Short tidak menyertakannya). */
+@Immutable
+data class ShortOwner(val name: String, val avatar: String?, val channelId: String?)
+
+/** Satu channel di hasil pencarian. */
+@Immutable
+data class ChannelResult(val id: String, val name: String, val avatar: String?, val handle: String?, val subscribers: String?)
+
+/** Hasil pencarian selain video: Shorts, channel yang cocok, dan playlist. */
+@Immutable
+data class SearchExtras(
+    val shorts: List<VideoItem> = emptyList(),
+    val channels: List<ChannelResult> = emptyList(),
+    val playlists: List<PlaylistRef> = emptyList(),
+)
+
 /** Isi halaman channel: username @, jumlah video, dan tab yang dimiliki channel (jenis → params). */
 @Immutable
 data class ChannelMeta(val handle: String?, val videoCount: Long, val tabs: Map<String, String>, val subscribers: Long = -1)
@@ -691,6 +707,62 @@ object InnerTube {
         thumbnail = frame ?: "https://i.ytimg.com/vi/$id/oar2.jpg",
         avatar = null, durationSec = 0, views = 0, uploaded = null,
     )
+
+    /** Pembuat sebuah Short, dari data halaman tontonnya (ringan: satu permintaan JSON, tanpa mengurai aliran). */
+    suspend fun shortOwner(videoId: String): ShortOwner? = withContext(Dispatchers.IO) {
+        var owner: ShortOwner? = null
+        postAny("next", JSONObject().put("videoId", videoId)).walk { key, obj ->
+            if (key == "videoOwnerRenderer" && owner == null) {
+                val name = obj.text("title")
+                if (name != null) {
+                    owner = ShortOwner(
+                        name = name,
+                        avatar = obj.thumbnails()?.lastOrNull()?.let(::absoluteUrl),
+                        channelId = obj.optJSONObject("navigationEndpoint")?.optJSONObject("browseEndpoint")
+                            ?.optString("browseId")?.takeIf { it.startsWith("UC") },
+                    )
+                }
+            }
+        }
+        owner
+    }
+
+    /**
+     * Selain video: yang juga dikirim YouTube untuk kata pencarian itu — channel yang cocok (kartu seperti di
+     * YouTube), rak Shorts, dan playlist. Kalau Shorts sedikit, dicari lagi dengan #shorts.
+     */
+    suspend fun searchExtras(query: String): SearchExtras = withContext(Dispatchers.IO) {
+        val root = postAny("search", JSONObject().put("query", query))
+        var shorts = parseFeed(root).shorts
+        if (shorts.size < 4) {
+            val more = runCatching { parseFeed(postAny("search", JSONObject().put("query", "$query #shorts"))).shorts }
+                .getOrDefault(emptyList())
+            shorts = (shorts + more).distinctBy { it.id }
+        }
+        SearchExtras(shorts.take(12), parseChannelResults(root).take(3), parsePlaylistTab(root).first.take(6))
+    }
+
+    /** Kartu channel di hasil pencarian: nama, @handle, jumlah pelanggan, foto profil. */
+    private fun parseChannelResults(root: JSONObject): List<ChannelResult> {
+        val out = LinkedHashMap<String, ChannelResult>()
+        root.walk { key, obj ->
+            if (key == "channelRenderer") {
+                val id = obj.optString("channelId").takeIf { it.startsWith("UC") } ?: return@walk
+                val name = obj.text("title") ?: return@walk
+                val texts = listOfNotNull(obj.text("subscriberCountText"), obj.text("videoCountText"))
+                out.putIfAbsent(
+                    id,
+                    ChannelResult(
+                        id = id, name = name,
+                        avatar = obj.thumbnails()?.lastOrNull()?.let(::absoluteUrl),
+                        handle = texts.firstOrNull { it.startsWith("@") },
+                        subscribers = texts.firstOrNull { !it.startsWith("@") },
+                    ),
+                )
+            }
+        }
+        return out.values.toList()
+    }
 
     // ── Writes ─────────────────────────────────────────────────────────────────
 

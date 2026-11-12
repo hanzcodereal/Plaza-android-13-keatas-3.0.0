@@ -98,6 +98,8 @@ data class AppNotification(
     val isMention: Boolean,
     /** Id channel (UC…) kalau diketahui; dipakai untuk membuka channel dari baris tanpa video (postingan). */
     val channelId: String? = null,
+    /** Short: ketukan membuka halaman Shorts, bukan pemutar biasa. */
+    val isShort: Boolean = false,
 )
 
 internal object NotificationsApi {
@@ -159,19 +161,30 @@ internal object NotificationsApi {
                 channelId = v.channelUrl?.substringAfterLast('/')?.takeIf { it.startsWith("UC") },
             )
         }
-        // Shorts terbaru dari channel yang dilanggan. YouTube tidak memberi jam tayangnya, jadi masuk grup "Hari ini".
-        page.shorts.take(12).forEach { v ->
+        // Shorts terbaru dari channel yang dilanggan. Feed tidak menyebut pembuatnya, jadi nama channel dan foto
+        // profilnya diambil per Short (bersamaan, dan diingat). Tanpa jam tayang dari YouTube: masuk grup "Hari ini".
+        val shorts = page.shorts.take(12)
+        val owners = kotlinx.coroutines.coroutineScope {
+            shorts.map { v ->
+                kotlinx.coroutines.async {
+                    shortOwners[v.id] ?: runCatching { InnerTube.shortOwner(v.id) }.getOrNull()?.also { shortOwners[v.id] = it }
+                }
+            }.map { it.await() }
+        }
+        shorts.forEachIndexed { i, v ->
+            val owner = owners[i]
             out += AppNotification(
                 id = "short:" + v.id,
-                name = v.channel.ifBlank { tr("Shorts") },
+                name = owner?.name ?: tr("Shorts"),
                 text = tr("New Short") + ": " + v.title,
                 ago = null,
-                avatar = v.avatar,
+                avatar = owner?.avatar,
                 thumbnail = v.thumbnail,
                 videoId = v.id,
                 minutesAgo = 720L,
                 isMention = false,
-                channelId = v.channelUrl?.substringAfterLast('/')?.takeIf { it.startsWith("UC") },
+                channelId = owner?.channelId,
+                isShort = true,
             )
         }
         page.posts.take(15).forEach { post ->
@@ -190,6 +203,8 @@ internal object NotificationsApi {
         }
         out
     }
+
+    private val shortOwners = java.util.concurrent.ConcurrentHashMap<String, ShortOwner>()
 
     /** Kotak masuk + kabar langganan jadi satu daftar, yang terbaru di atas; video yang sama tidak tampil dua kali. */
     fun merge(inbox: List<AppNotification>, updates: List<AppNotification>): List<AppNotification> {
@@ -316,7 +331,7 @@ fun SearchAction(onClick: () -> Unit) {
 
 /** Halaman Notifikasi: pilihan Semua / Sebutan, dikelompokkan Hari ini, Minggu ini, dan lebih lama. */
 @Composable
-fun NotificationsScreen(contentPadding: PaddingValues, onBack: () -> Unit, onOpen: (VideoItem) -> Unit) {
+fun NotificationsScreen(contentPadding: PaddingValues, onBack: () -> Unit, onOpen: (VideoItem) -> Unit, onOpenShort: (VideoItem) -> Unit = onOpen) {
     val c = MaterialTheme.colorScheme
     var mentionsOnly by remember { mutableStateOf(false) }
     LaunchedEffect(Account.signedIn, Account.profile?.name) { Notifications.load() }
@@ -382,7 +397,7 @@ fun NotificationsScreen(contentPadding: PaddingValues, onBack: () -> Unit, onOpe
                             NotificationRow(
                                 n,
                                 onClick = {
-                                    if (video != null) onOpen(video)
+                                    if (video != null) { if (n.isShort) onOpenShort(video) else onOpen(video) }
                                     else n.channelId?.let { id -> openChannel("https://www.youtube.com/channel/$id") }
                                 },
                                 onMenu = { video?.let(menu) },

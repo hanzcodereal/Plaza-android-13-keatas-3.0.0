@@ -91,9 +91,8 @@ class ChannelState(val url: String, private val scope: CoroutineScope) {
     /** Tab yang dimiliki channel ini, berurutan; Video selalu ada. */
     val tabs: List<String>
         get() {
-            val m = meta ?: return listOf("videos")
-            if (m.tabs.isEmpty()) return TabOrder
-            return TabOrder.filter { it == "videos" || it in m.tabs }
+            // Semua tab selalu tampil (Video, Shorts, Live, Playlist, Postingan); yang kosong menampilkan "belum ada".
+            return TabOrder
         }
     val current: TabData get() = data.getValue(tab)
 
@@ -180,7 +179,13 @@ class ChannelState(val url: String, private val scope: CoroutineScope) {
                     }
                 }
                 t.loaded = true
-            }.onFailure { if (!more || t.size == 0) t.error = YouTube.friendlyError(it) }
+            }.onFailure {
+                val m = meta
+                // Tab yang tidak dimiliki channel ini: kosong, bukan galat.
+                val missing = !more && kind != "videos" && m != null && m.tabs.isNotEmpty() && kind !in m.tabs
+                if (missing) t.loaded = true
+                else if (!more || t.size == 0) t.error = YouTube.friendlyError(it)
+            }
             t.loading = false
             if (chain) loadTab(kind, true)
         }

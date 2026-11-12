@@ -426,7 +426,7 @@ fun PlazaApp() {
                     onOpenShort = openShort,
                 )
                 Tab.Shorts -> ShortsScreen(shorts, { shortsMorph.value }, overlayBottom = stackBottom + GlassHeight + 16.dp)
-                Tab.Search -> SearchScreen(search, contentPadding, onOpen = player::open, scrollToTop = scrollToTop[Tab.Search] ?: 0)
+                Tab.Search -> SearchScreen(search, contentPadding, onOpen = player::open, scrollToTop = scrollToTop[Tab.Search] ?: 0, onOpenShort = openShort, onOpenPlaylist = { openPlaylist = it })
                 Tab.Library -> LibraryScreen(
                     lib, contentPadding, onOpen = player::open, onOpenPlaylist = { openPlaylist = it },
                     onSignIn = { signingIn = true }, onAccount = { accountSheet = true },
@@ -490,6 +490,7 @@ fun PlazaApp() {
                 contentPadding,
                 onBack = { showNotifications = false },
                 onOpen = { v -> showNotifications = false; player.open(v) },
+                onOpenShort = openShort,
             )
         }
 

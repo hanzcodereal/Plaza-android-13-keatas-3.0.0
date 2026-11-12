@@ -151,7 +151,7 @@ fun HomeScreen(
                 }
             }
         } else if (signedIn) {
-            FeedList(lib.home, contentPadding.withTop(top), onOpen, header = { item(key = "homeChips") { CategoryChips(cats, chips) } }, scrollToTop = scrollToTop, indicatorTop = top, showShorts = ShortsSetting.enabled, showLive = true, showPosts = true, onOpenShort = onOpenShort, onDownloads = onOpenDownloads,
+            FeedList(lib.home, contentPadding.withTop(top), onOpen, header = { item(key = "homeChips") { CategoryChips(cats, chips) } }, scrollToTop = scrollToTop, indicatorTop = top, showShorts = false, showLive = false, showPosts = true, onOpenShort = onOpenShort, onDownloads = onOpenDownloads,
                 emptyBody = tr("YouTube has no recommendations for this account yet. Watch a few videos, then try again."))
         } else {
             LazyColumn(contentPadding = contentPadding.withTop(top)) {
@@ -507,10 +507,11 @@ class HomeCategories(private val scope: CoroutineScope) {
     fun retry() = select(selected)
 }
 
-/** Chip bawaan YouTube yang ditampilkan, urut: Musik, Berita, Live, Kartun, Baru diupload, Baru untuk Anda (nama sesuai bahasa). */
+/** Chip bawaan YouTube yang ditampilkan, urut: Musik, Berita, Game, Live, Kartun, Baru diupload, Baru untuk Anda (nama sesuai bahasa). */
 private val HOME_CHIP_ORDER = listOf(
     setOf("music", "musik"),
     setOf("news", "berita"),
+    setOf("gaming", "game", "games"),
     setOf("live", "langsung"),
     setOf("cartoons", "cartoon", "kartun"),
     setOf("recently uploaded", "baru diupload", "baru diunggah", "baru saja diupload"),
@@ -559,6 +560,14 @@ class SearchState(private val scope: CoroutineScope) {
         private set
     var results by mutableStateOf<List<VideoItem>>(emptyList())
         private set
+    /** Short yang cocok dengan kata pencarian; ketuk membuka halaman Shorts. */
+    var shorts by mutableStateOf<List<VideoItem>>(emptyList())
+        private set
+    /** Channel yang cocok dengan kata pencarian (kartu di atas hasil). */
+    var channels by mutableStateOf<List<ChannelResult>>(emptyList())
+        private set
+    var playlists by mutableStateOf<List<PlaylistRef>>(emptyList())
+        private set
     var loading by mutableStateOf(false)
         private set
     var error by mutableStateOf<String?>(null)
@@ -566,6 +575,7 @@ class SearchState(private val scope: CoroutineScope) {
     var generation by mutableStateOf(0)
         private set
     private var job: Job? = null
+    private var shortsJob: Job? = null
 
     fun submit() {
         val q = query.trim()
@@ -575,6 +585,13 @@ class SearchState(private val scope: CoroutineScope) {
         loading = true
         error = null
         job?.cancel()
+        shortsJob?.cancel()
+        shorts = emptyList(); channels = emptyList(); playlists = emptyList()
+        shortsJob = scope.launch {
+            runCatching { InnerTube.searchExtras(q) }.onSuccess {
+                if (submitted == q) { shorts = it.shorts; channels = it.channels; playlists = it.playlists }
+            }
+        }
         job = scope.launch {
             runCatching { YouTube.search(q) }
                 .onSuccess { results = it; generation++ }
@@ -586,8 +603,16 @@ class SearchState(private val scope: CoroutineScope) {
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun SearchScreen(state: SearchState, contentPadding: PaddingValues, onOpen: (VideoItem) -> Unit, scrollToTop: Int = 0) {
+fun SearchScreen(
+    state: SearchState,
+    contentPadding: PaddingValues,
+    onOpen: (VideoItem) -> Unit,
+    scrollToTop: Int = 0,
+    onOpenShort: (VideoItem) -> Unit = onOpen,
+    onOpenPlaylist: (PlaylistRef) -> Unit = {},
+) {
     val c = MaterialTheme.colorScheme
+    val openChannel = LocalChannelOpener.current
     val keyboard = LocalSoftwareKeyboardController.current
     val focus = LocalFocusManager.current
     val view = LocalView.current
@@ -706,13 +731,91 @@ fun SearchScreen(state: SearchState, contentPadding: PaddingValues, onOpen: (Vid
                 val list = rememberScrollToTop(scrollToTop)
                 LaunchedEffect(state.generation) { list.scrollToItem(0) }
                 LazyColumn(state = list, contentPadding = contentPadding.withTop(top)) {
-                items(state.results, key = { it.id }) { video ->
+                // Seperti YouTube: channel yang cocok di atas, Short disisipkan setelah beberapa hasil pertama,
+                // playlist di akhir.
+                items(state.channels, key = { "c:" + it.id }) { ch ->
+                    ChannelResultCard(ch) { openChannel("https://www.youtube.com/channel/${ch.id}") }
+                }
+                items(state.results.take(3), key = { it.id }) { video ->
                     VideoCard(video, onClick = { onOpen(video) })
+                }
+                if (state.shorts.isNotEmpty()) item(key = "searchShorts") { ShortsShelf(state.shorts, onOpenShort) }
+                items(state.results.drop(3), key = { it.id }) { video ->
+                    VideoCard(video, onClick = { onOpen(video) })
+                }
+                if (state.playlists.isNotEmpty()) {
+                    item(key = "searchPlaylistsTitle") { SectionTitle(tr("Playlists")) }
+                    items(state.playlists, key = { "p:" + it.id }) { pl -> PlaylistResultRow(pl) { onOpenPlaylist(pl) } }
                 }
             }
             }
         }
         }
+        }
+    }
+}
+
+/** Kartu channel di hasil pencarian, seperti YouTube: foto profil, nama, @handle, pelanggan, tombol Langganan. */
+@Composable
+private fun ChannelResultCard(ch: ChannelResult, onOpen: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var subscribed by remember(ch.id) { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(ch.id, Account.signedIn) {
+        subscribed = if (Account.signedIn) runCatching { InnerTube.channelSubscribed(ch.id) }.getOrNull() else null
+    }
+    Row(
+        Modifier.fillMaxWidth().pressable(pressedScale = 0.98f, onClick = onOpen).padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ChannelAvatar(ch.avatar, ch.name, size = 72)
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(ch.name, fontWeight = FontWeight.Bold, fontSize = 17.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            ch.handle?.let { Text(it, color = c.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            ch.subscribers?.let { Text(it, color = c.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+            subscribed?.let { sub ->
+                Text(
+                    if (sub) tr("Subscribed") else tr("Subscribe"),
+                    fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                    color = if (sub) c.onSurface else c.onPrimary,
+                    modifier = Modifier.padding(top = 8.dp)
+                        .pressable(pressedScale = 0.96f) {
+                            subscribed = !sub
+                            scope.launch {
+                                runCatching { InnerTube.setSubscribed(ch.id, !sub) }
+                                    .onSuccess { SubscriptionSync.changed(ch.id, !sub) }
+                                    .onFailure { subscribed = sub }
+                            }
+                        }
+                        .clip(RoundedCornerShape(50))
+                        .background(if (sub) c.surfaceContainerHighest else c.primary)
+                        .padding(horizontal = 18.dp, vertical = 9.dp),
+                )
+            }
+        }
+    }
+}
+
+/** Playlist di hasil pencarian: gambar kecil, judul, keterangan; ketuk membuka playlist. */
+@Composable
+private fun PlaylistResultRow(pl: PlaylistRef, onClick: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Row(
+        Modifier.fillMaxWidth().pressable(pressedScale = 0.98f, onClick = onClick).padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (pl.thumbnail != null) {
+            Thumbnail(pl.thumbnail, Modifier.size(width = 128.dp, height = 72.dp), radius = 12)
+        } else {
+            Box(Modifier.size(width = 128.dp, height = 72.dp).clip(RoundedCornerShape(12.dp)).background(c.secondaryContainer), contentAlignment = Alignment.Center) {
+                Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, null, tint = contentColorFor(c.secondaryContainer))
+            }
+        }
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(pl.title, fontWeight = FontWeight.Bold, fontSize = 15.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            pl.subtitle?.let { Text(it, color = c.onSurfaceVariant, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         }
     }
 }
