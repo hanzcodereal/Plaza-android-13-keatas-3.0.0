@@ -151,7 +151,7 @@ fun HomeScreen(
                 }
             }
         } else if (signedIn) {
-            FeedList(lib.home, contentPadding.withTop(top), onOpen, header = { item(key = "homeChips") { CategoryChips(cats, chips) } }, scrollToTop = scrollToTop, indicatorTop = top, showShorts = false, showLive = false, showPosts = true, onOpenShort = onOpenShort, onDownloads = onOpenDownloads,
+            FeedList(lib.home, contentPadding.withTop(top), onOpen, header = { item(key = "homeChips") { CategoryChips(cats, chips) } }, scrollToTop = scrollToTop, indicatorTop = top, showShorts = ShortsSetting.enabled, showLive = false, showPosts = true, onOpenShort = onOpenShort, onDownloads = onOpenDownloads,
                 emptyBody = tr("YouTube has no recommendations for this account yet. Watch a few videos, then try again."))
         } else {
             LazyColumn(contentPadding = contentPadding.withTop(top)) {
