@@ -110,11 +110,34 @@ fun HomeScreen(
             }
         },
     ) { top ->
-        if (signedIn) {
-            FeedList(lib.home, contentPadding.withTop(top), onOpen, scrollToTop = scrollToTop, indicatorTop = top, showShorts = ShortsSetting.enabled, showLive = true, showPosts = true, onOpenShort = onOpenShort, onDownloads = onOpenDownloads,
+        val cats = lib.categories
+        if (cats.selected != null) {
+            // Kategori dipilih: hasil pencarian YouTube untuk kategori itu (juga tanpa masuk akun).
+            LazyColumn(contentPadding = contentPadding.withTop(top)) {
+                item(key = "homeChips") { CategoryChips(cats) }
+                when {
+                    cats.error != null && cats.results.isEmpty() -> item {
+                        EmptyState(
+                            icon = Icons.Rounded.CloudOff,
+                            title = tr("Couldn't load this"),
+                            body = cats.error.orEmpty(),
+                            action = { PillButton(tr("Try again"), { cats.retry() }) },
+                        )
+                    }
+                    cats.loading && cats.results.isEmpty() -> item {
+                        Box(Modifier.fillMaxWidth().padding(28.dp), Alignment.Center) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 4.dp, modifier = Modifier.size(32.dp))
+                        }
+                    }
+                    else -> items(cats.results, key = { it.id }) { v -> VideoCard(v, onClick = { onOpen(v) }) }
+                }
+            }
+        } else if (signedIn) {
+            FeedList(lib.home, contentPadding.withTop(top), onOpen, header = { item(key = "homeChips") { CategoryChips(cats) } }, scrollToTop = scrollToTop, indicatorTop = top, showShorts = ShortsSetting.enabled, showLive = true, showPosts = true, onOpenShort = onOpenShort, onDownloads = onOpenDownloads,
                 emptyBody = tr("YouTube has no recommendations for this account yet. Watch a few videos, then try again."))
         } else {
             LazyColumn(contentPadding = contentPadding.withTop(top)) {
+                item(key = "homeChips") { CategoryChips(cats) }
                 item {
                     EmptyState(
                         icon = Icons.Rounded.Subscriptions,
@@ -411,6 +434,76 @@ private fun TextLink(text: String, onClick: () -> Unit) {
 // ── Search ─────────────────────────────────────────────────────────────────────
 
 /** Lives above the tab switcher so results survive switching tabs. */
+@Stable
+class HomeCategories(private val scope: CoroutineScope) {
+    /** Kunci terjemahan; teks yang tampil juga dipakai sebagai kata pencarian di YouTube. */
+    val keys = listOf("Latest news", "Trending", "Music", "Gaming", "Sports")
+    /** null = Semua (feed Beranda biasa). */
+    var selected by mutableStateOf<String?>(null)
+        private set
+    var results by mutableStateOf<List<VideoItem>>(emptyList())
+        private set
+    var loading by mutableStateOf(false)
+        private set
+    var error by mutableStateOf<String?>(null)
+        private set
+    private val cache = HashMap<String, List<VideoItem>>()
+    private var job: Job? = null
+
+    fun select(key: String?) {
+        selected = key
+        job?.cancel()
+        error = null
+        if (key == null) { loading = false; return }
+        val cached = cache[key]
+        if (cached != null) { results = cached; loading = false; return }
+        results = emptyList()
+        loading = true
+        job = scope.launch {
+            runCatching { YouTube.search(tr(key)) }
+                .onSuccess { list ->
+                    val unique = list.distinctBy { it.id }
+                    cache[key] = unique
+                    if (selected == key) results = unique
+                }
+                .onFailure { if (selected == key) error = YouTube.friendlyError(it) }
+            if (selected == key) loading = false
+        }
+    }
+
+    fun retry() {
+        val key = selected ?: return
+        cache.remove(key)
+        select(key)
+    }
+}
+
+@Composable
+private fun CategoryChips(cats: HomeCategories) {
+    LazyRow(
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.padding(top = 2.dp, bottom = 10.dp),
+    ) {
+        item(key = "all") { CategoryChip(tr("All"), cats.selected == null) { cats.select(null) } }
+        items(cats.keys, key = { it }) { key -> CategoryChip(tr(key), cats.selected == key) { cats.select(key) } }
+    }
+}
+
+@Composable
+private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val c = MaterialTheme.colorScheme
+    Box(
+        Modifier
+            .pressable(pressedScale = 0.96f, onClick = onClick)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (selected) c.primary else c.surfaceContainerHigh)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+    ) {
+        Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (selected) c.onPrimary else c.onSurface, maxLines = 1)
+    }
+}
+
 @Stable
 class SearchState(private val scope: CoroutineScope) {
     var query by mutableStateOf("")

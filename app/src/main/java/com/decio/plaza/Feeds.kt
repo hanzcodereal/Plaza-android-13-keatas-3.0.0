@@ -205,6 +205,8 @@ class LibraryData(scope: CoroutineScope) {
     val home = FeedState(scope, prefetchTop = 2, freshOnRefresh = true, liveLoader = { InnerTube.liveNow() }) { InnerTube.homeOrFallback(it) }
     /** Channel yang baru dihentikan langganannya; disaring dari feed dan daftar sampai YouTube menyusul. */
     private val unsubscribed = HashSet<String>()
+    /** Kategori di Beranda (Berita terkini, Trending, Musik, Gaming, Olahraga). */
+    val categories = HomeCategories(scope)
     // Rak Live: siaran langsung dari channel yang dilanggan (diambil dari feed Langganan).
     val subscriptions = FeedState(scope, prefetchTop = 2, liveLoader = { InnerTube.subscriptionsFeed().videos.filter { it.live } }) { token ->
         val page = InnerTube.subscriptionsFeed(token)

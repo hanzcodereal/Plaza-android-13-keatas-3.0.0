@@ -159,6 +159,21 @@ internal object NotificationsApi {
                 channelId = v.channelUrl?.substringAfterLast('/')?.takeIf { it.startsWith("UC") },
             )
         }
+        // Shorts terbaru dari channel yang dilanggan. YouTube tidak memberi jam tayangnya, jadi masuk grup "Hari ini".
+        page.shorts.take(12).forEach { v ->
+            out += AppNotification(
+                id = "short:" + v.id,
+                name = v.channel.ifBlank { tr("Shorts") },
+                text = tr("New Short") + ": " + v.title,
+                ago = null,
+                avatar = v.avatar,
+                thumbnail = v.thumbnail,
+                videoId = v.id,
+                minutesAgo = 720L,
+                isMention = false,
+                channelId = v.channelUrl?.substringAfterLast('/')?.takeIf { it.startsWith("UC") },
+            )
+        }
         page.posts.take(15).forEach { post ->
             out += AppNotification(
                 id = "post:" + post.id,
