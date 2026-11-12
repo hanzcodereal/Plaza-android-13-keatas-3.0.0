@@ -52,6 +52,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -164,9 +166,9 @@ internal object NotificationsApi {
         // Shorts terbaru dari channel yang dilanggan. Feed tidak menyebut pembuatnya, jadi nama channel dan foto
         // profilnya diambil per Short (bersamaan, dan diingat). Tanpa jam tayang dari YouTube: masuk grup "Hari ini".
         val shorts = page.shorts.take(12)
-        val owners = kotlinx.coroutines.coroutineScope {
+        val owners = coroutineScope {
             shorts.map { v ->
-                kotlinx.coroutines.async {
+                async {
                     shortOwners[v.id] ?: runCatching { InnerTube.shortOwner(v.id) }.getOrNull()?.also { shortOwners[v.id] = it }
                 }
             }.map { it.await() }
