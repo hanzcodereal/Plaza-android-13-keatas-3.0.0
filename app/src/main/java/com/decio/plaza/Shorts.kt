@@ -1253,18 +1253,7 @@ private fun ShortPage(shorts: ShortsState, page: Int, overlayBottom: Dp) {
     ) {
         Box(Modifier.fillMaxSize().clipToBounds()) {
             // Mode layar penuh: seperti semula (Short vertikal memenuhi layar, yang lebih lebar muat selebar layar).
-            // Mode kartu: video tampil utuh, tidak dipotong di sisi, dengan latar dari bingkai video yang
-            // dibentangkan, buram, dan digelapkan.
-            if (card) {
-                AsyncImage(
-                    model = coil.request.ImageRequest.Builder(LocalContext.current).data(item.thumbnail).size(40, 72).build(),
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    filterQuality = FilterQuality.Low,
-                    modifier = Modifier.fillMaxSize(),
-                )
-                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)))
-            }
+            // Mode kartu: kotak persegi seukuran videonya, utuh, tanpa latar buram atau tambahan lain.
             Box(
                 Modifier
                     .fillMaxSize()

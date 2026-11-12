@@ -142,6 +142,7 @@ fun SubscriptionsScreen(
     onSignIn: () -> Unit,
     onAccount: () -> Unit,
     scrollToTop: Int = 0,
+    onOpenShort: (VideoItem) -> Unit = onOpen,
 ) {
     val signedIn = Account.signedIn
     val openChannel = LocalChannelOpener.current
@@ -167,7 +168,8 @@ fun SubscriptionsScreen(
                         openChannel("https://www.youtube.com/channel/$id")
                     }
                 }
-            }, scrollToTop = scrollToTop, indicatorTop = top)
+            }, scrollToTop = scrollToTop, indicatorTop = top,
+                showShorts = ShortsSetting.enabled, showLive = true, showPosts = true, onOpenShort = onOpenShort)
         } else {
             LazyColumn(contentPadding = contentPadding.withTop(top)) {
                 item {
@@ -338,7 +340,7 @@ private fun PlaylistTile(playlist: PlaylistRef, modifier: Modifier, onClick: () 
     val shape = RoundedCornerShape(26.dp)
     val (icon, tone) = when (playlist.id) {
         "WL" -> Icons.Rounded.WatchLater to c.primaryContainer
-        "LL" -> Icons.Rounded.ThumbUp to c.tertiaryContainer
+        "LL" -> Icons.Rounded.ThumbUp to c.primaryContainer
         else -> Icons.AutoMirrored.Rounded.PlaylistPlay to c.secondaryContainer
     }
     Column(

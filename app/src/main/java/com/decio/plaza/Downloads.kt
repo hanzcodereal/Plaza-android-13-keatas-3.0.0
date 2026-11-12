@@ -423,10 +423,11 @@ fun DownloadsTile(onClick: () -> Unit) {
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        // Bentuk dan warna sama dengan ikon Tonton nanti dan Video yang disukai.
         Box(
-            Modifier.size(42.dp).clip(androidx.compose.foundation.shape.CircleShape).background(c.primaryContainer),
+            Modifier.size(52.dp).clip(CookieShape).background(c.primaryContainer),
             contentAlignment = Alignment.Center,
-        ) { Icon(Icons.Rounded.Download, null, tint = c.primary, modifier = Modifier.size(22.dp)) }
+        ) { Icon(Icons.Rounded.Download, null, tint = androidx.compose.material3.contentColorFor(c.primaryContainer)) }
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Text(tr("Downloads"), fontWeight = FontWeight.ExtraBold, fontSize = 16.sp)

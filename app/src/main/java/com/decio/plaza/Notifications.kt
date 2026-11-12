@@ -257,7 +257,7 @@ object Notifications {
 
 private val BadgeRed = Color(0xFFE62117)
 
-/** Tombol bulat header: ikon warna aplikasi (primary), latar mengikuti tema (primaryContainer). */
+/** Tombol bulat header: latar mengikuti tema (primaryContainer), ikon berwarna seperti ikon Tonton nanti dan Video yang disukai. */
 @Composable
 fun ThemedCircleAction(icon: ImageVector, contentDescription: String, badge: Int = 0, onClick: () -> Unit) {
     val c = MaterialTheme.colorScheme
@@ -265,7 +265,7 @@ fun ThemedCircleAction(icon: ImageVector, contentDescription: String, badge: Int
         Box(
             Modifier.matchParentSize().clip(CircleShape).background(c.primaryContainer),
             contentAlignment = Alignment.Center,
-        ) { Icon(icon, contentDescription, tint = c.primary, modifier = Modifier.size(22.dp)) }
+        ) { Icon(icon, contentDescription, tint = androidx.compose.material3.contentColorFor(c.primaryContainer), modifier = Modifier.size(22.dp)) }
         if (badge > 0) {
             Box(
                 Modifier.align(Alignment.TopEnd).offset(x = 2.dp, y = (-2).dp)
