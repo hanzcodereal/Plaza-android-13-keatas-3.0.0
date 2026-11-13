@@ -53,17 +53,24 @@ data class ShortOwner(val name: String, val avatar: String?, val channelId: Stri
 @Immutable
 data class ChannelResult(val id: String, val name: String, val avatar: String?, val handle: String?, val subscribers: String?)
 
-/** Hasil pencarian selain video: Shorts, channel yang cocok, dan playlist. */
+/** Satu halaman hasil pencarian: video (+ rak Shorts) dari [feed], channel yang cocok, dan playlist. */
 @Immutable
-data class SearchExtras(
-    val shorts: List<VideoItem> = emptyList(),
-    val channels: List<ChannelResult> = emptyList(),
-    val playlists: List<PlaylistRef> = emptyList(),
+data class SearchPage(
+    val feed: FeedPage,
+    val channels: List<ChannelResult>,
+    val playlists: List<PlaylistRef>,
 )
 
 /** Isi halaman channel: username @, jumlah video, dan tab yang dimiliki channel (jenis → params). */
 @Immutable
-data class ChannelMeta(val handle: String?, val videoCount: Long, val tabs: Map<String, String>, val subscribers: Long = -1)
+data class ChannelMeta(
+    val handle: String?,
+    val videoCount: Long,
+    val tabs: Map<String, String>,
+    val subscribers: Long = -1,
+    /** Nama channel sesuai bahasa aplikasi (seperti di aplikasi YouTube); bisa beda dari nama bawaan channel. */
+    val name: String? = null,
+)
 
 /** Satu postingan komunitas channel. */
 @Immutable
@@ -365,6 +372,7 @@ object InnerTube {
         var handle: String? = null
         var count = -1L
         var subs = -1L
+        var name: String? = null
         root.walk { key, obj ->
             when (key) {
                 "tabRenderer" -> {
@@ -388,7 +396,12 @@ object InnerTube {
         }
         root.optJSONObject("header")?.walk { key, obj ->
             when (key) {
+                "pageHeaderViewModel" -> if (name == null) {
+                    name = obj.optJSONObject("title")?.optJSONObject("dynamicTextViewModel")?.optJSONObject("text")
+                        ?.optString("content")?.trim()?.ifBlank { null }
+                }
                 "c4TabbedHeaderRenderer" -> {
+                    if (name == null) name = obj.text("title")?.trim()?.ifBlank { null }
                     if (handle == null) obj.text("channelHandleText")?.trim()?.takeIf { HANDLE.matches(it) }?.let { handle = it }
                     if (count < 0) obj.text("videosCountText")?.let { count = parseViews(it) }
                     if (subs < 0) obj.text("subscriberCountText")?.let { subs = parseViews(it) }
@@ -401,7 +414,7 @@ object InnerTube {
                 }
             }
         }
-        return ChannelMeta(handle, count, tabs, subs)
+        return ChannelMeta(handle, count, tabs, subs, name)
     }
 
     /** Video atau siaran langsung dari satu tab channel (Video / Live), halaman berikutnya lewat [continuation]. */
@@ -728,18 +741,20 @@ object InnerTube {
     }
 
     /**
-     * Selain video: yang juga dikirim YouTube untuk kata pencarian itu — channel yang cocok (kartu seperti di
-     * YouTube), rak Shorts, dan playlist. Kalau Shorts sedikit, dicari lagi dengan #shorts.
+     * Halaman hasil pencarian asli YouTube (bahasa dan nama channel sama dengan aplikasi YouTube): video, dan di
+     * halaman pertama juga rak Shorts, kartu channel yang cocok, dan playlist. Halaman berikutnya lewat [continuation].
      */
-    suspend fun searchExtras(query: String): SearchExtras = withContext(Dispatchers.IO) {
-        val root = postAny("search", JSONObject().put("query", query))
-        var shorts = parseFeed(root).shorts
-        if (shorts.size < 4) {
-            val more = runCatching { parseFeed(postAny("search", JSONObject().put("query", "$query #shorts"))).shorts }
-                .getOrDefault(emptyList())
-            shorts = (shorts + more).distinctBy { it.id }
-        }
-        SearchExtras(shorts.take(12), parseChannelResults(root).take(3), parsePlaylistTab(root).first.take(6))
+    suspend fun searchPage(query: String, continuation: String? = null): SearchPage = withContext(Dispatchers.IO) {
+        val body = if (continuation != null) JSONObject().put("continuation", continuation) else JSONObject().put("query", query)
+        val root = postAny("search", body)
+        val feed = parseFeed(root)
+        if (continuation != null) SearchPage(feed, emptyList(), emptyList())
+        else SearchPage(feed, parseChannelResults(root).take(3), parsePlaylistTab(root).first.take(6))
+    }
+
+    /** Short tambahan (pencarian #shorts) kalau rak Shorts bawaan hasil pencarian sedikit. */
+    suspend fun searchMoreShorts(query: String): List<VideoItem> = withContext(Dispatchers.IO) {
+        parseFeed(postAny("search", JSONObject().put("query", "$query #shorts"))).shorts
     }
 
     /** Kartu channel di hasil pencarian: nama, @handle, jumlah pelanggan, foto profil. */

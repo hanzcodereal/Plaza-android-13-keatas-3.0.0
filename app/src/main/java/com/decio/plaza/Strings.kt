@@ -272,6 +272,7 @@ private val Indonesian: Map<String, String> = mapOf(
     "Uploaded" to "Mengupload",
     "Posted" to "Memposting",
     "New Short" to "Short baru",
+    "News" to "Berita",
     "App name" to "Nama aplikasi",
     "Version" to "Versi",
     "Support the developer" to "Dukung developer",

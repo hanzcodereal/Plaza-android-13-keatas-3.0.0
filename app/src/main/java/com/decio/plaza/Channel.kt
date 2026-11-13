@@ -128,8 +128,12 @@ class ChannelState(val url: String, private val scope: CoroutineScope) {
         loadTab(tab, false)
     }
 
+    /** Nama channel sesuai bahasa aplikasi (dari YouTube langsung); cadangannya nama dari NewPipe. */
+    val displayName: String
+        get() = meta?.name?.takeIf { it.isNotBlank() } ?: details?.name.orEmpty()
+
     private fun fill(d: ChannelDetails, items: List<VideoItem>) = items.map {
-        it.copy(channel = it.channel.ifBlank { d.name }, avatar = it.avatar ?: d.avatar, channelUrl = it.channelUrl ?: d.url)
+        it.copy(channel = it.channel.ifBlank { displayName.ifBlank { d.name } }, avatar = it.avatar ?: d.avatar, channelUrl = it.channelUrl ?: d.url)
     }
 
     /** Memuat tab Live lebih awal (kalau channel punya) supaya foto profil bisa diberi tanda LIVE. */
@@ -166,7 +170,8 @@ class ChannelState(val url: String, private val scope: CoroutineScope) {
                     }
                     else -> {
                         val page = when (kind) {
-                            "videos" -> YouTube.channelVideos(d, token)
+                            // Tab Video asli YouTube dengan params dari halaman channel itu sendiri (semua halaman lanjutan).
+                            "videos" -> InnerTube.channelTabFeed(d.id, params, token)
                             "shorts" -> InnerTube.channelShorts(d.id, params, token)
                             else -> InnerTube.channelTabFeed(d.id, params, token)
                         }
@@ -234,7 +239,7 @@ fun ChannelScreen(
             CircleAction(Icons.AutoMirrored.Rounded.ArrowBack, tr("Back"), onBack)
             Spacer(Modifier.width(12.dp))
             Text(
-                state.details?.name.orEmpty(),
+                state.displayName,
                 fontFamily = RoundedHeavy, fontWeight = FontWeight.ExtraBold, fontSize = 22.sp, letterSpacing = (-0.6).sp,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
@@ -262,13 +267,13 @@ fun ChannelScreen(
                             // Channel yang sedang siaran langsung: cincin merah + LIVE; ketuk untuk menonton.
                             val liveNow = state.data["live"]?.videos?.firstOrNull { it.live }
                             Box(Modifier.pressable(enabled = liveNow != null) { liveNow?.let(onOpen) }) {
-                                LiveAvatar(d.avatar, d.name, size = 76, live = liveNow != null)
+                                LiveAvatar(d.avatar, state.displayName, size = 76, live = liveNow != null)
                             }
                             Spacer(Modifier.width(14.dp))
                             Column(Modifier.weight(1f)) {
                                 // Urutan: nama, @username, lalu pelanggan dan jumlah video.
                                 val m = state.meta
-                                Text(d.name, fontFamily = RoundedHeavy, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text(state.displayName, fontFamily = RoundedHeavy, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 m?.handle?.let { Text(it, color = c.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
                                 val subs = d.subscribers.takeIf { it > 0 } ?: m?.subscribers?.takeIf { it > 0 }
                                 val stats = listOfNotNull(

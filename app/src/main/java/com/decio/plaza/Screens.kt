@@ -476,9 +476,9 @@ class HomeCategories(private val scope: CoroutineScope) {
         if (chip == null) { loading = false; return }
         loading = true
         job = scope.launch {
-            runCatching { InnerTube.browse("FEwhat_to_watch", chip.token) }
+            runCatching { loadChipFeed(chip.token) }
                 .onSuccess { page ->
-                    if (selected == chip) { results = page.videos; next = page.next }
+                    if (selected == chip) { results = page.videos.distinctBy { it.id }; next = page.next }
                 }
                 .onFailure { if (selected == chip) error = YouTube.friendlyError(it) }
             if (selected == chip) loading = false
@@ -518,11 +518,38 @@ private val HOME_CHIP_ORDER = listOf(
     setOf("new to you", "baru untuk anda", "baru untuk kamu"),
 )
 
+/**
+ * Chip Berita dan Live tidak selalu dikirim YouTube di beranda. Kalau tidak ada, dipakai halaman resmi YouTube
+ * untuk itu (kanal "News" dan "Live" milik YouTube, tab siaran langsung); tetap data asli, bukan pencarian.
+ * Token berbentuk "browse:idChannel:params".
+ */
+private const val NEWS_TOKEN = "browse:UCYfdidRxbB8Qhf0Nx7ioOYw:"
+private const val LIVE_TOKEN = "browse:UC4R8DWoMoI7CAwX8_LjQHig:EgdsaXZldGFikgEDCKEK"
+
 /** Dari chip yang YouTube kirim, ambil yang dipilih di atas; kalau tak satu pun cocok (bahasa lain), tampilkan chip aslinya. */
 private fun homeChips(all: List<FeedChip>): List<FeedChip> {
-    val picked = HOME_CHIP_ORDER.mapNotNull { names -> all.firstOrNull { it.label.trim().lowercase() in names } }
-    return picked.ifEmpty { all.take(8) }
+    if (all.isEmpty()) return emptyList()
+    val real = HOME_CHIP_ORDER.map { names -> all.firstOrNull { it.label.trim().lowercase() in names } }
+    // Berita dan Live selalu ada: dari chip YouTube kalau dikirim, kalau tidak dari halaman resmi YouTube.
+    val chips = real.mapIndexedNotNull { i, chip ->
+        chip ?: when (i) {
+            1 -> FeedChip(tr("News"), NEWS_TOKEN)
+            3 -> FeedChip("Live", LIVE_TOKEN)
+            else -> null
+        }
+    }
+    // Bahasa lain (nama chip tak dikenali): chip asli YouTube ditampilkan juga, setelah Berita dan Live.
+    return if (real.all { it == null }) chips + all.take(6) else chips
 }
+
+/** Memuat feed untuk chip: chip bawaan YouTube lewat token halaman, chip Berita/Live lewat halaman resmi YouTube. */
+private suspend fun loadChipFeed(token: String): FeedPage =
+    if (token.startsWith("browse:")) {
+        val parts = token.split(":", limit = 3)
+        InnerTube.channelTabFeed(parts[1], parts[2])
+    } else {
+        InnerTube.browse("FEwhat_to_watch", token)
+    }
 
 @Composable
 private fun CategoryChips(cats: HomeCategories, chips: List<FeedChip>) {
@@ -574,8 +601,12 @@ class SearchState(private val scope: CoroutineScope) {
         private set
     var generation by mutableStateOf(0)
         private set
+    /** Token halaman hasil berikutnya; null = sudah semua. */
+    var next by mutableStateOf<String?>(null)
+        private set
+    var loadingMore by mutableStateOf(false)
+        private set
     private var job: Job? = null
-    private var shortsJob: Job? = null
 
     fun submit() {
         val q = query.trim()
@@ -585,18 +616,53 @@ class SearchState(private val scope: CoroutineScope) {
         loading = true
         error = null
         job?.cancel()
-        shortsJob?.cancel()
+        loadingMore = false
+        next = null
         shorts = emptyList(); channels = emptyList(); playlists = emptyList()
-        shortsJob = scope.launch {
-            runCatching { InnerTube.searchExtras(q) }.onSuccess {
-                if (submitted == q) { shorts = it.shorts; channels = it.channels; playlists = it.playlists }
+        job = scope.launch {
+            // Hasil asli YouTube (nama channel sama dengan aplikasi YouTube); NewPipe hanya cadangan.
+            val page = runCatching { InnerTube.searchPage(q) }.getOrNull()
+            if (page != null && page.feed.videos.isNotEmpty()) {
+                if (submitted == q) {
+                    results = page.feed.videos.distinctBy { it.id }
+                    next = page.feed.next
+                    shorts = page.feed.shorts
+                    channels = page.channels
+                    playlists = page.playlists
+                    generation++
+                }
+                loading = false
+                if (page.feed.shorts.size < 4) {
+                    runCatching { InnerTube.searchMoreShorts(q) }.onSuccess { more ->
+                        if (submitted == q) shorts = (shorts + more).distinctBy { it.id }.take(12)
+                    }
+                }
+            } else {
+                runCatching { YouTube.search(q) }
+                    .onSuccess { if (submitted == q) { results = it; generation++ } }
+                    .onFailure { if (submitted == q) error = YouTube.friendlyError(it) }
+                loading = false
             }
         }
-        job = scope.launch {
-            runCatching { YouTube.search(q) }
-                .onSuccess { results = it; generation++ }
-                .onFailure { error = YouTube.friendlyError(it) }
-            loading = false
+    }
+
+    /** Memuat halaman hasil berikutnya (video), sampai semua hasil YouTube habis. */
+    fun loadMore() {
+        val token = next ?: return
+        if (loadingMore || loading) return
+        loadingMore = true
+        val q = submitted
+        scope.launch {
+            runCatching { InnerTube.searchPage(q, token) }
+                .onSuccess { page ->
+                    if (submitted == q) {
+                        val seen = results.mapTo(HashSet()) { it.id }
+                        results = results + page.feed.videos.filter { seen.add(it.id) }
+                        next = page.feed.next
+                    }
+                }
+                .onFailure { if (submitted == q) next = null }
+            loadingMore = false
         }
     }
 }
@@ -740,12 +806,18 @@ fun SearchScreen(
                     VideoCard(video, onClick = { onOpen(video) })
                 }
                 if (state.shorts.isNotEmpty()) item(key = "searchShorts") { ShortsShelf(state.shorts, onOpenShort) }
-                items(state.results.drop(3), key = { it.id }) { video ->
-                    VideoCard(video, onClick = { onOpen(video) })
-                }
                 if (state.playlists.isNotEmpty()) {
                     item(key = "searchPlaylistsTitle") { SectionTitle(tr("Playlists")) }
                     items(state.playlists, key = { "p:" + it.id }) { pl -> PlaylistResultRow(pl) { onOpenPlaylist(pl) } }
+                }
+                items(state.results.drop(3), key = { it.id }) { video ->
+                    VideoCard(video, onClick = { onOpen(video) })
+                }
+                if (state.next != null) item(key = "searchMore") {
+                    LaunchedEffect(state.next) { state.loadMore() }
+                    Box(Modifier.fillMaxWidth().padding(28.dp), Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary, strokeWidth = 4.dp, modifier = Modifier.size(32.dp))
+                    }
                 }
             }
             }
