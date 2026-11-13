@@ -20,6 +20,22 @@ android {
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
     }
 
+    // Kunci tetap di repo (plaza.p12): tiap build GitHub bertanda tangan sama, jadi aplikasi bisa diperbarui di
+    // atas versi lama tanpa dicopot (lonceng, pengaturan, dan data akun tetap ada). Kunci debug bawaan dibuat
+    // baru di setiap build GitHub, sehingga APK barunya ditolak Android sebagai pembaruan.
+    val plazaKeystore = rootProject.file("plaza.p12")
+    if (plazaKeystore.exists()) {
+        signingConfigs {
+            getByName("debug") {
+                storeFile = plazaKeystore
+                storeType = "pkcs12"
+                storePassword = "plaza-sideload"
+                keyAlias = "plaza"
+                keyPassword = "plaza-sideload"
+            }
+        }
+    }
+
     buildTypes {
         release {
             // Judge speed and smoothness on this build type, never on debug.
