@@ -69,7 +69,7 @@ class TabData {
     val size get() = videos.size + playlists.size + posts.size
 }
 
-private val TabOrder = listOf("videos", "shorts", "live", "playlists", "posts")
+private val TabOrder = listOf("all", "videos", "shorts", "live", "playlists", "posts")
 
 @Stable
 class ChannelState(val url: String, private val scope: CoroutineScope) {
@@ -84,7 +84,7 @@ class ChannelState(val url: String, private val scope: CoroutineScope) {
     var subscribed by mutableStateOf<Boolean?>(null)
         private set
     /** Tab yang sedang dibuka. */
-    var tab by mutableStateOf("videos")
+    var tab by mutableStateOf("all")
         private set
     val data: Map<String, TabData> = TabOrder.associateWith { TabData() }
 
@@ -107,7 +107,7 @@ class ChannelState(val url: String, private val scope: CoroutineScope) {
                     details = d
                     if (Account.signedIn) launch { subscribed = runCatching { InnerTube.channelSubscribed(d.id) }.getOrNull() }
                     launch { meta = runCatching { InnerTube.channelMeta(d.id) }.getOrNull() }
-                    loadTab("videos", false)
+                    loadTab("all", false)
                 }
                 .onFailure { error = YouTube.friendlyError(it) }
             loading = false
@@ -151,7 +151,9 @@ class ChannelState(val url: String, private val scope: CoroutineScope) {
         t.loading = true
         if (!more) t.error = null
         val token = if (more) t.next else null
-        val params = meta?.tabs?.get(kind) ?: InnerTube.CHANNEL_TAB_FALLBACK.getValue(kind)
+        // "all" = semua unggahan; bila daftar unggahan gagal, cadangannya tab Video.
+        val tabKind = if (kind == "all") "videos" else kind
+        val params = meta?.tabs?.get(tabKind) ?: InnerTube.CHANNEL_TAB_FALLBACK.getValue(tabKind)
         scope.launch {
             var chain = false
             runCatching {
@@ -171,6 +173,11 @@ class ChannelState(val url: String, private val scope: CoroutineScope) {
                     else -> {
                         val page = when (kind) {
                             // Tab Video asli YouTube dengan params dari halaman channel itu sendiri (semua halaman lanjutan).
+                            "all" -> {
+                                val uploads = runCatching { InnerTube.channelUploads(d.id, token) }.getOrNull()
+                                if (uploads != null && (uploads.videos.isNotEmpty() || more)) uploads
+                                else InnerTube.channelTabFeed(d.id, params, token)
+                            }
                             "videos" -> InnerTube.channelTabFeed(d.id, params, token)
                             "shorts" -> InnerTube.channelShorts(d.id, params, token)
                             else -> InnerTube.channelTabFeed(d.id, params, token)
@@ -187,7 +194,7 @@ class ChannelState(val url: String, private val scope: CoroutineScope) {
             }.onFailure {
                 val m = meta
                 // Tab yang tidak dimiliki channel ini: kosong, bukan galat.
-                val missing = !more && kind != "videos" && m != null && m.tabs.isNotEmpty() && kind !in m.tabs
+                val missing = !more && kind != "videos" && kind != "all" && m != null && m.tabs.isNotEmpty() && kind !in m.tabs
                 if (missing) t.loaded = true
                 else if (!more || t.size == 0) t.error = YouTube.friendlyError(it)
             }
@@ -275,7 +282,7 @@ fun ChannelScreen(
                                 val m = state.meta
                                 Text(state.displayName, fontFamily = RoundedHeavy, fontWeight = FontWeight.ExtraBold, fontSize = 20.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                                 m?.handle?.let { Text(it, color = c.onSurfaceVariant, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                                val subs = d.subscribers.takeIf { it > 0 } ?: m?.subscribers?.takeIf { it > 0 }
+                                val subs = m?.subscribers?.takeIf { it > 0 } ?: d.subscribers.takeIf { it > 0 }
                                 val stats = listOfNotNull(
                                     subs?.let { "${formatCount(it)} ${tr("subscribers")}" },
                                     m?.videoCount?.takeIf { it >= 0 }?.let { "${formatCount(it)} ${tr("videos")}" },
@@ -293,15 +300,17 @@ fun ChannelScreen(
                                 }
                             }
                         }
-                        if (d.description.isNotBlank()) {
+                        // Bio asli dari YouTube; cadangannya dari NewPipe.
+                        val bio = state.meta?.description?.takeIf { it.isNotBlank() } ?: d.description
+                        if (bio.isNotBlank()) {
                             var bioOpen by remember(d.id) { mutableStateOf(false) }
                             Spacer(Modifier.height(12.dp))
                             Column(Modifier.fillMaxWidth().pressable(pressedScale = 0.99f) { bioOpen = !bioOpen }) {
                                 Text(
-                                    d.description, color = c.onSurfaceVariant, fontSize = 13.5.sp, lineHeight = 19.sp,
+                                    bio, color = c.onSurfaceVariant, fontSize = 13.5.sp, lineHeight = 19.sp,
                                     maxLines = if (bioOpen) Int.MAX_VALUE else 3, overflow = TextOverflow.Ellipsis,
                                 )
-                                if (bioOpen || d.description.length > 110 || d.description.contains('\n')) {
+                                if (bioOpen || bio.length > 110 || bio.contains('\n')) {
                                     Text(
                                         if (bioOpen) tr("less") else tr("…more"),
                                         color = c.onSurface, fontSize = 13.5.sp, fontWeight = FontWeight.ExtraBold,
@@ -371,6 +380,7 @@ private fun ChannelTabRow(tabs: List<String>, selected: String, onSelect: (Strin
             ) {
                 Text(
                     when (kind) {
+                        "all" -> tr("All")
                         "shorts" -> "Shorts"
                         "live" -> "Live"
                         "playlists" -> tr("Playlists")

@@ -70,6 +70,8 @@ data class ChannelMeta(
     val subscribers: Long = -1,
     /** Nama channel sesuai bahasa aplikasi (seperti di aplikasi YouTube); bisa beda dari nama bawaan channel. */
     val name: String? = null,
+    /** Bio channel apa adanya dari YouTube (deskripsi lengkap). */
+    val description: String? = null,
 )
 
 /** Satu postingan komunitas channel. */
@@ -343,6 +345,16 @@ object InnerTube {
         return out
     }
 
+    /**
+     * Semua unggahan channel (video, Shorts, siaran langsung) dari daftar unggahan resmi YouTube ("UU…"),
+     * terbaru dulu; halaman berikutnya lewat [continuation].
+     */
+    suspend fun channelUploads(channelId: String, continuation: String? = null): FeedPage = withContext(Dispatchers.IO) {
+        val body = if (continuation != null) JSONObject().put("continuation", continuation)
+        else JSONObject().put("browseId", "VLUU" + channelId.removePrefix("UC"))
+        parseFeed(postAny("browse", body))
+    }
+
     suspend fun channelVideos(channelId: String, continuation: String? = null): FeedPage = withContext(Dispatchers.IO) {
         val body = if (continuation != null) JSONObject().put("continuation", continuation)
         else JSONObject().put("browseId", channelId).put("params", CHANNEL_VIDEOS_TAB)
@@ -373,6 +385,7 @@ object InnerTube {
         var count = -1L
         var subs = -1L
         var name: String? = null
+        var description: String? = null
         root.walk { key, obj ->
             when (key) {
                 "tabRenderer" -> {
@@ -389,16 +402,23 @@ object InnerTube {
                     }
                     if (kind != null && params.isNotBlank()) tabs.putIfAbsent(kind, params)
                 }
-                "channelMetadataRenderer" -> if (handle == null) {
-                    obj.optString("vanityChannelUrl").substringAfterLast('/').takeIf { it.startsWith("@") }?.let { handle = it }
+                "channelMetadataRenderer" -> {
+                    if (handle == null) obj.optString("vanityChannelUrl").substringAfterLast('/').takeIf { it.startsWith("@") }?.let { handle = it }
+                    if (description == null) description = obj.optString("description").trim().ifBlank { null }
                 }
             }
         }
         root.optJSONObject("header")?.walk { key, obj ->
             when (key) {
-                "pageHeaderViewModel" -> if (name == null) {
-                    name = obj.optJSONObject("title")?.optJSONObject("dynamicTextViewModel")?.optJSONObject("text")
-                        ?.optString("content")?.trim()?.ifBlank { null }
+                "pageHeaderViewModel" -> {
+                    if (name == null) {
+                        name = obj.optJSONObject("title")?.optJSONObject("dynamicTextViewModel")?.optJSONObject("text")
+                            ?.optString("content")?.trim()?.ifBlank { null }
+                    }
+                    if (description == null) {
+                        description = obj.optJSONObject("description")?.optJSONObject("descriptionPreviewViewModel")
+                            ?.optJSONObject("description")?.optString("content")?.trim()?.ifBlank { null }
+                    }
                 }
                 "c4TabbedHeaderRenderer" -> {
                     if (name == null) name = obj.text("title")?.trim()?.ifBlank { null }
@@ -414,7 +434,7 @@ object InnerTube {
                 }
             }
         }
-        return ChannelMeta(handle, count, tabs, subs, name)
+        return ChannelMeta(handle, count, tabs, subs, name, description)
     }
 
     /** Video atau siaran langsung dari satu tab channel (Video / Live), halaman berikutnya lewat [continuation]. */
