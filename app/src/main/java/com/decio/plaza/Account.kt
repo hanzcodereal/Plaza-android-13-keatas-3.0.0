@@ -49,6 +49,10 @@ data class FeedChip(val label: String, val token: String)
 @Immutable
 data class ShortOwner(val name: String, val avatar: String?, val channelId: String?)
 
+/** Jumlah ditonton dan suka yang sebenarnya dari YouTube untuk satu video (-1 = tidak diketahui). */
+@Immutable
+data class VideoStats(val views: Long, val likes: Long)
+
 /** Satu channel di hasil pencarian. */
 @Immutable
 data class ChannelResult(val id: String, val name: String, val avatar: String?, val handle: String?, val subscribers: String?)
@@ -740,6 +744,22 @@ object InnerTube {
         thumbnail = frame ?: "https://i.ytimg.com/vi/$id/oar2.jpg",
         avatar = null, durationSec = 0, views = 0, uploaded = null,
     )
+
+    /** Jumlah ditonton dan suka asli dari halaman tonton YouTube (angka persis, bukan singkatan); null kalau tak terbaca. */
+    suspend fun videoStats(videoId: String): VideoStats? = withContext(Dispatchers.IO) {
+        var views = -1L
+        var likes = -1L
+        postAny("next", JSONObject().put("videoId", videoId)).walk { key, obj ->
+            when (key) {
+                "videoViewCountRenderer" -> if (views < 0) views = parseViews(obj.text("viewCount") ?: obj.text("shortViewCount"))
+                "likeCountEntity" -> if (likes < 0) {
+                    likes = obj.optString("likeCountIfIndifferentNumber").toLongOrNull()
+                        ?: obj.optString("likeCountNumber").toLongOrNull() ?: -1L
+                }
+            }
+        }
+        if (views < 0 && likes < 0) null else VideoStats(views, likes)
+    }
 
     /** Pembuat sebuah Short, dari data halaman tontonnya (ringan: satu permintaan JSON, tanpa mengurai aliran). */
     suspend fun shortOwner(videoId: String): ShortOwner? = withContext(Dispatchers.IO) {

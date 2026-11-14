@@ -43,6 +43,9 @@ class PlayerState(private val scope: CoroutineScope) {
     /** What's loaded (or loading). Null means nothing — no mini-player. */
     var current by mutableStateOf<VideoItem?>(null)
         private set
+    /** Ditonton dan suka asli dari YouTube; mengganti angka dari NewPipe kalau terbaca. */
+    var stats by mutableStateOf<VideoStats?>(null)
+        private set
     var details by mutableStateOf<VideoDetails?>(null)
         private set
     var loading by mutableStateOf(false)
@@ -169,6 +172,12 @@ class PlayerState(private val scope: CoroutineScope) {
         if (startPlayback) Net.prewarmMediaConnection()
         current = item
         details = null
+        stats = null
+        if (!item.live) {
+            scope.launch {
+                runCatching { InnerTube.videoStats(item.id) }.onSuccess { if (current?.id == item.id) stats = it }
+            }
+        }
         error = null
         firstFrameRendered = false
         videoAspect = 16f / 9f
@@ -391,7 +400,7 @@ class PlayerState(private val scope: CoroutineScope) {
     /** Like count adjusted for the user's own change since the video opened. */
     val displayLikes: Long
         get() {
-            val base = details?.likes ?: return -1
+            val base = stats?.likes?.takeIf { it >= 0 } ?: details?.likes ?: return -1
             val now = accountState?.like ?: return base
             return base + when {
                 now == LikeStatus.Like && originalLike != LikeStatus.Like -> 1

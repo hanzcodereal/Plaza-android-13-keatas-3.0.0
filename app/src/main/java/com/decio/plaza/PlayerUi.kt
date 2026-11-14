@@ -259,9 +259,9 @@ fun PlayerScreen(
                             liveInfo?.date ?: item.uploaded?.ifBlank { null }?.let(::localizeAgo),
                             (liveInfo?.likes ?: details?.likes?.takeIf { it > 0 }?.let { formatCount(it) })?.let { "$it ${tr("likes")}" },
                         ).joinDots() else listOfNotNull(
-                            item.views.takeIf { it >= 0 }?.let { "${formatCount(it)} ${tr("views")}" },
+                            (state.stats?.views?.takeIf { it >= 0 } ?: item.views).takeIf { it >= 0 }?.let { "${formatCount(it)} ${tr("views")}" },
                             item.uploaded?.ifBlank { null }?.let(::localizeAgo),
-                            details?.likes?.takeIf { it > 0 }?.let { "${formatCount(it)} ${tr("likes")}" },
+                            state.displayLikes.takeIf { it > 0 }?.let { "${formatCount(it)} ${tr("likes")}" },
                         ).joinDots()
                         val hasDescription = !details?.description.isNullOrBlank()
                         // Satu teks saja: "…more" menyambung di ujung baris statistik. Dulu keduanya berdampingan

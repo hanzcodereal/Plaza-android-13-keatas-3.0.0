@@ -91,8 +91,9 @@ class ChannelState(val url: String, private val scope: CoroutineScope) {
     /** Tab yang dimiliki channel ini, berurutan; Video selalu ada. */
     val tabs: List<String>
         get() {
-            // Semua tab selalu tampil (Video, Shorts, Live, Playlist, Postingan); yang kosong menampilkan "belum ada".
-            return TabOrder
+            // Semua tab tampil (Semua, Video, Shorts, Playlist, Postingan); Live hanya untuk channel yang pernah siaran
+            // langsung, menurut data tab dari YouTube.
+            return TabOrder.filter { it != "live" || meta?.tabs?.containsKey("live") == true }
         }
     val current: TabData get() = data.getValue(tab)
 
