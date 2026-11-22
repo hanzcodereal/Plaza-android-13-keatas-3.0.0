@@ -11,6 +11,9 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -213,6 +216,46 @@ internal fun NavPill(
 
     val currentSelected by androidx.compose.runtime.rememberUpdatedState(selected)
     val currentOnSelect by androidx.compose.runtime.rememberUpdatedState(onSelect)
+    // Liquid Glass: gelembung kaca (lensa) mengikuti jari saat bilah digeser, lalu meluncur ke tab terdekat.
+    // Posisi, regangan, dan keadaan meluncur hanya dibaca saat menggambar (graphicsLayer), jadi menggeser
+    // tidak memicu komposisi ulang bilah di setiap gerakan jari: itu yang membuat geseran mulus.
+    var lensDragging by remember { mutableStateOf(false) }
+    var lensDragX by remember { mutableStateOf(0f) }
+    var lensShownX by remember { mutableStateOf(0f) }
+    var lensStretch by remember { mutableStateOf(0f) }
+    var lensTarget by remember { mutableStateOf<Tab?>(null) }
+    val lensScope = androidx.compose.runtime.rememberCoroutineScope()
+    val lensSettle = animateFloatAsState(
+        if (lensDragging) 0f else 1f,
+        if (reduced) snap() else spring(dampingRatio = 0.7f, stiffness = 320f),
+        label = "lensSettle",
+    )
+    androidx.compose.runtime.LaunchedEffect(lensDragging) {
+        // Tiap bingkai selama menggeser: gelembung menyusul jari dengan halus dan regangannya mereda.
+        if (lensDragging) {
+            lensShownX = lensDragX
+            while (true) {
+                androidx.compose.runtime.withFrameNanos {
+                    lensStretch *= 0.82f
+                    lensShownX += (lensDragX - lensShownX) * 0.55f
+                }
+            }
+        }
+    }
+    /** Tab yang pusatnya paling dekat dengan [x] (koordinat bilah), dari posisi tab yang sedang tampil. */
+    fun nearestTab(x: Float): Tab? {
+        val pill = anchors.bar ?: anchors.outer ?: return null
+        var best: Tab? = null
+        var bestDistance = Float.MAX_VALUE
+        for (t in Tab.entries) {
+            val coords = anchors.tabs[t.ordinal] ?: continue
+            if (!coords.isAttached) continue
+            val centre = coords.positionInRoot().x - pill.positionInRoot().x + coords.size.width / 2f
+            val distance = abs(centre - x)
+            if (distance < bestDistance) { bestDistance = distance; best = t }
+        }
+        return best
+    }
     Box(modifier.widthIn(max = NavWidth).height(NavHeight).fillMaxWidth().onPlaced { anchors.outer = it }) {
         Box(
             modifier = Modifier
@@ -302,16 +345,39 @@ internal fun NavPill(
                         // Shorts dan di Bawaan tidak bisa digeser). Tab yang aktif melebar mengikuti jari.
                         .pointerInput(GlassSettings.enabled, tabsEnabled, controlsActive) {
                             if (!GlassSettings.enabled || !tabsEnabled || controlsActive) return@pointerInput
-                            detectHorizontalDragGestures { change, _ ->
-                                val tabsNow = Tab.entries.filter { (it != Tab.Shorts || ShortsSetting.enabled) && (it != Tab.Search || !SearchPlacement.top) }
-                                val x = change.position.x.coerceIn(0f, (size.width - 1).toFloat())
-                                val idx = (x / size.width * tabsNow.size).toInt().coerceIn(0, tabsNow.size - 1)
-                                val target = tabsNow[idx]
-                                if (target != currentSelected) {
-                                    currentOnSelect(target)
-                                    view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
-                                }
-                            }
+                            detectHorizontalDragGestures(
+                                onDragStart = { offset ->
+                                    lensDragX = offset.x.coerceIn(0f, size.width.toFloat())
+                                    lensTarget = null
+                                    lensDragging = true
+                                    view.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
+                                },
+                                onDragEnd = {
+                                    lensDragging = false
+                                    lensStretch = 0f
+                                    val target = nearestTab(lensDragX)
+                                    lensTarget = target
+                                    lensScope.launch {
+                                        // Gelembung diberi waktu meluncur dulu; pindah layar (pekerjaan berat) menyusul
+                                        // supaya gerakannya tetap mulus.
+                                        delay(140)
+                                        if (!lensDragging && target != null && target != currentSelected) {
+                                            currentOnSelect(target)
+                                            view.performHapticFeedback(HapticFeedbackConstants.CLOCK_TICK)
+                                        }
+                                        lensTarget = null
+                                    }
+                                },
+                                onDragCancel = {
+                                    lensDragging = false
+                                    lensStretch = 0f
+                                    lensTarget = null
+                                },
+                                onHorizontalDrag = { change, delta ->
+                                    lensDragX = change.position.x.coerceIn(0f, size.width.toFloat())
+                                    lensStretch = maxOf(lensStretch, (abs(delta) / 36f).coerceAtMost(0.25f))
+                                },
+                            )
                         }
                         .padding(BarPadding),
                     horizontalArrangement = Arrangement.spacedBy(BarGap),
@@ -331,7 +397,7 @@ internal fun NavPill(
                         val pillColor by animateColorAsState(
                             // Full primary (not the pale container tone) so the selected tab stands
                             // out clearly against the bar in light and dark (Derek, 2026-10-05).
-                            if (active) c.primary else c.primary.copy(alpha = 0f),
+                            if (active) c.primary.copy(alpha = if (GlassSettings.enabled && lensDragging) 0.3f else 1f) else c.primary.copy(alpha = 0f),
                             if (reduced) snap() else tween(220, easing = Motion.Emphasized), label = "tabPill",
                         )
                         val weight by animateFloatAsState(if (active) selectedTabWeight(shown.size) else 1f, spec, label = "tabWeight")
@@ -377,6 +443,35 @@ internal fun NavPill(
                             }
                         }
                     }
+                }
+
+                // Liquid Glass: gelembung kaca yang mengikuti jari. Digerakkan lewat graphicsLayer (tahap gambar saja,
+                // tanpa ukur ulang). Hilang di Shorts (bilah itu tidak bisa digeser) dan saat pemutar membuka.
+                if (GlassSettings.enabled) {
+                    val lensW = 80.dp
+                    val lensH = 54.dp
+                    Box(
+                        Modifier
+                            .size(lensW, lensH)
+                            .graphicsLayer {
+                                val settle = lensSettle.value
+                                val pill = anchors.bar ?: anchors.outer
+                                val tab = lensTarget ?: currentSelected
+                                val sel = anchors.tabs[tab.ordinal]
+                                val tabCentre = if (pill != null && sel != null && sel.isAttached) {
+                                    sel.positionInRoot().x - pill.positionInRoot().x + sel.size.width / 2f
+                                } else lensShownX
+                                // Dari jari ke tab terpilih (pegas: sedikit melampaui lalu kembali), tab dibaca tiap bingkai
+                                // supaya gelembung ikut tab yang sedang melebar.
+                                translationX = lerpF(lensShownX, tabCentre, settle) - lensW.toPx() / 2f
+                                translationY = (NavHeight.toPx() - lensH.toPx()) / 2f
+                                alpha = ramp(1f - settle, 0f, 0.1f) * (1f - ramp(settle, 0.85f, 0.99f)) *
+                                    (1f - shortsBarFade(shorts())) * (1f - morph.progress.value)
+                                scaleX = 1.10f + lensStretch
+                                scaleY = 1.10f - lensStretch * 0.45f
+                            }
+                            .drawBehind { drawGlassBody(CircleShape, c.primary.copy(alpha = 0.5f)) },
+                    )
                 }
 
                 // ── The player's controls ── (bottom-centred: the bar grows upward from them)
