@@ -722,8 +722,7 @@ fun SearchScreen(
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth()
                 .height(60.dp)
-                .clip(CircleShape)
-                .background(c.surfaceContainerHigh)
+                .glassSurface(CircleShape, c.surfaceContainerHigh)
                 .padding(start = 20.dp, end = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -878,7 +877,7 @@ private fun PlaylistResultRow(pl: PlaylistRef, onClick: () -> Unit) {
         if (pl.thumbnail != null) {
             Thumbnail(pl.thumbnail, Modifier.size(width = 128.dp, height = 72.dp), radius = 12)
         } else {
-            Box(Modifier.size(width = 128.dp, height = 72.dp).clip(RoundedCornerShape(12.dp)).background(c.secondaryContainer), contentAlignment = Alignment.Center) {
+            Box(Modifier.size(width = 128.dp, height = 72.dp).glassSurface(RoundedCornerShape(12.dp), c.secondaryContainer), contentAlignment = Alignment.Center) {
                 Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, null, tint = contentColorFor(c.secondaryContainer))
             }
         }
