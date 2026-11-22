@@ -455,6 +455,7 @@ object ThemeSettings {
         val p = context.getSharedPreferences("appearance", Context.MODE_PRIVATE).also { prefs = it }
         seed = p.getString("seed", null) ?: if (wallpaperAvailable) null else SEED_CREAM_ROSE
         mode = p.getString("mode", "system") ?: "system"
+        GlassSettings.init(context)
     }
 
     fun choose(seedHex: String?) {
