@@ -417,8 +417,7 @@ fun DownloadsTile(onClick: () -> Unit) {
     val busy = Downloads.items.count { it.state == DownloadState.Queued || it.state == DownloadState.Downloading }
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
-            .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-            .background(c.surfaceContainerLow)
+            .glassSurface(androidx.compose.foundation.shape.RoundedCornerShape(20.dp), c.surfaceContainerLow)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -456,7 +455,7 @@ fun DownloadsScreen(contentPadding: PaddingValues, onBack: () -> Unit, onOpen: (
     val c = MaterialTheme.colorScheme
     val context = androidx.compose.ui.platform.LocalContext.current
     val list = Downloads.items
-    Column(Modifier.fillMaxSize().background(c.surface).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().pageBackdrop(c.surface).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(48.dp).pressable(onClick = onBack), contentAlignment = Alignment.Center) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, tr("Back"), tint = c.onSurface)
