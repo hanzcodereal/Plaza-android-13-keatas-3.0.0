@@ -355,7 +355,7 @@ fun PlazaApp() {
     SideEffect { shorts.cover(tab == Tab.Shorts && openChannel != null) }
     BackHandler(enabled = tab == Tab.Shorts && shorts.channelMenu) { shorts.channelMenu = false }
 
-    BoxWithConstraints(Modifier.fillMaxSize().background(c.surface)) {
+    BoxWithConstraints(Modifier.fillMaxSize().pageBackdrop(c.surface)) {
         val stageFloor = maxOf(StageMinAspect, constraints.maxWidth / (constraints.maxHeight * StageMaxHeightShare))
         SideEffect { player.stageFloor = stageFloor }
         // Both ends of the morph, from the same constants the mini-player and player use.
