@@ -394,7 +394,8 @@ private fun PlaylistTile(playlist: PlaylistRef, modifier: Modifier, onClick: () 
         if (playlist.thumbnail != null) {
             Thumbnail(playlist.thumbnail, Modifier.size(width = 72.dp, height = 44.dp), radius = 12)
         } else {
-            Box(Modifier.size(52.dp).clip(CookieShape).background(tone), contentAlignment = Alignment.Center) {
+            // Bentuk, warna, dan tepi sama dengan ikon Unduhan (kaca di Liquid Glass).
+            Box(Modifier.size(52.dp).glassSurface(CookieShape, tone), contentAlignment = Alignment.Center) {
                 Icon(icon, null, tint = contentColorFor(tone))
             }
         }
