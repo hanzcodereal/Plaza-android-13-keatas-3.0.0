@@ -234,7 +234,7 @@ fun RegionPrompt() {
         onDismissRequest = {},
         properties = DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false, usePlatformDefaultWidth = false),
     ) {
-        Column(Modifier.fillMaxSize().background(c.surface).systemBarsPadding().padding(horizontal = 20.dp)) {
+        Column(Modifier.fillMaxSize().pageBackdrop(c.surface).systemBarsPadding().padding(horizontal = 20.dp)) {
             Spacer(Modifier.height(24.dp))
             Text(tr("Choose your region"), fontFamily = RoundedHeavy, fontWeight = FontWeight.ExtraBold, fontSize = 26.sp)
             Spacer(Modifier.height(6.dp))
