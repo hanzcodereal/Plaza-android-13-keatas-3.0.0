@@ -237,7 +237,7 @@ fun ChannelScreen(
         derivedStateOf { (list.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= list.layoutInfo.totalItemsCount - 4 }
     }
     LaunchedEffect(nearEnd, cur.size, state.tab) { if (nearEnd && cur.size > 0) state.loadMore() }
-    Box(Modifier.fillMaxSize().background(c.surface)) {
+    Box(Modifier.fillMaxSize().pageBackdrop(c.surface)) {
     CollapsingHeaderLayout(
         header = {
         Row(
