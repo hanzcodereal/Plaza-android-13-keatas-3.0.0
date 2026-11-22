@@ -231,8 +231,7 @@ internal fun SpeedPanelContent(state: PlayerState, inBar: Boolean = false) {
                     .graphicsLayer { alpha = resetAlpha }
                     .height(36.dp)
                     .pressable(enabled = !atOne) { glideTo(1f) }
-                    .clip(RoundedCornerShape(18.dp))
-                    .background(c.surfaceContainerHighest)
+                    .glassSurface(RoundedCornerShape(18.dp), c.surfaceContainerHighest)
                     .padding(horizontal = 14.dp),
                 contentAlignment = Alignment.Center,
             ) { Text("1×", fontSize = 13.sp, fontWeight = FontWeight.ExtraBold) }
