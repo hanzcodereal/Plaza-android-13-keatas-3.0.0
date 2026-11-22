@@ -1591,6 +1591,8 @@ private fun DrawScope.drawGlass(shorts: ShortsState, g: GlassGeometry, p: Float,
             )
         }
         drawFrost(shape, under, origin, alpha, GlassTint)
+        // Liquid Glass: kilau dan tepi bercahaya di atas kaca buram bilah Shorts (tetap tidak bisa digeser).
+        if (GlassSettings.enabled) drawGlassRim(shape, alpha)
     }
 }
 
