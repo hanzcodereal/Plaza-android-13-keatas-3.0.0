@@ -424,7 +424,7 @@ fun DownloadsTile(onClick: () -> Unit) {
     ) {
         // Bentuk dan warna sama dengan ikon Tonton nanti dan Video yang disukai.
         Box(
-            Modifier.size(52.dp).clip(CookieShape).background(c.primaryContainer),
+            Modifier.size(52.dp).glassSurface(CookieShape, c.primaryContainer),
             contentAlignment = Alignment.Center,
         ) { Icon(Icons.Rounded.Download, null, tint = androidx.compose.material3.contentColorFor(c.primaryContainer)) }
         Spacer(Modifier.width(14.dp))
