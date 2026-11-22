@@ -109,7 +109,7 @@ fun CollapsingHeaderLayout(
                     // Eases out as it leaves, so the edge never reads as a hard sliding slab.
                     alpha = if (headerPx > 0) 1f - 0.5f * (-offset.value / headerPx).coerceIn(0f, 1f) else 1f
                 }
-                .background(c.surface),
+                .background(if (GlassSettings.enabled) Color.Transparent else c.surface),
         ) { header() }
     }
 }
