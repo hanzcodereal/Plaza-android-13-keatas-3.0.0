@@ -9,6 +9,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
@@ -301,7 +302,7 @@ internal fun NavPill(
                         // Shorts dan di Bawaan tidak bisa digeser). Tab yang aktif melebar mengikuti jari.
                         .pointerInput(GlassSettings.enabled, tabsEnabled, controlsActive) {
                             if (!GlassSettings.enabled || !tabsEnabled || controlsActive) return@pointerInput
-                            androidx.compose.foundation.gestures.detectHorizontalDragGestures { change, _ ->
+                            detectHorizontalDragGestures { change, _ ->
                                 val tabsNow = Tab.entries.filter { (it != Tab.Shorts || ShortsSetting.enabled) && (it != Tab.Search || !SearchPlacement.top) }
                                 val x = change.position.x.coerceIn(0f, (size.width - 1).toFloat())
                                 val idx = (x / size.width * tabsNow.size).toInt().coerceIn(0, tabsNow.size - 1)
