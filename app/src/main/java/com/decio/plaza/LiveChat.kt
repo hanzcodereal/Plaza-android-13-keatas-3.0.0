@@ -90,16 +90,10 @@ internal object LiveChatApi {
     suspend fun start(videoId: String): String? = withContext(Dispatchers.IO) {
         val root = InnerTube.postAny("next", JSONObject().put("videoId", videoId))
         var token: String? = null
-        var all: String? = null
         root.walk { key, obj ->
             if (token == null && key == "liveChatRenderer") token = obj.collectStrings("continuation").firstOrNull()
-            // "Live chat" (semua pesan, apa adanya) = pilihan kedua di menu urutan; yang pertama "Top chat" (disaring).
-            if (all == null && key == "sortFilterSubMenuRenderer") {
-                all = obj.optJSONArray("subMenuItems")?.optJSONObject(1)?.optJSONObject("continuation")
-                    ?.optJSONObject("reloadContinuationData")?.optString("continuation")?.ifBlank { null }
-            }
         }
-        all ?: token
+        token
     }
 
     suspend fun poll(continuation: String): LiveChatPage = withContext(Dispatchers.IO) {
@@ -203,7 +197,7 @@ internal object LiveChatApi {
     }
 }
 
-/** Chat langsung satu siaran: memuat pesan terus-menerus selagi tampil, tiap 5 detik. */
+/** Chat langsung satu siaran: memuat pesan terus-menerus selagi tampil; jeda mengikuti permintaan YouTube. */
 @Stable
 class LiveChatState(private val scope: CoroutineScope) {
     var messages by mutableStateOf<List<LiveChatMessage>>(emptyList())
@@ -227,6 +221,7 @@ class LiveChatState(private val scope: CoroutineScope) {
                 var token = LiveChatApi.start(videoId)
                 if (token == null) { status = "Chat langsung tidak tersedia untuk siaran ini."; return@launch }
                 var failures = 0
+                var lastWait = POLL_MS
                 while (isActive && token != null) {
                     val cycleStart = System.currentTimeMillis()
                     try {
@@ -236,6 +231,7 @@ class LiveChatState(private val scope: CoroutineScope) {
                         val fresh = page.messages.filter { seen.add(it.id) }
                         page.sendParams?.let { sendParams = it; canSend = true }
                         token = page.next
+                        lastWait = page.waitMs.coerceIn(MIN_POLL_MS, MAX_POLL_MS)
                         if (fresh.isNotEmpty()) {
                             if (messages.isEmpty() || fresh.size == 1) {
                                 // Putaran pertama (pesan yang sudah ada) dan pesan tunggal: langsung tampil.
@@ -244,7 +240,7 @@ class LiveChatState(private val scope: CoroutineScope) {
                             } else {
                                 // Pesan satu putaran tampil bergantian sepanjang jedanya (seperti di YouTube),
                                 // bukan sekaligus, supaya chat mengalir halus.
-                                val gap = (POLL_MS * 8 / 10 / fresh.size).coerceIn(60L, 600L)
+                                val gap = (page.waitMs.coerceIn(MIN_POLL_MS, MAX_POLL_MS) * 8 / 10 / fresh.size).coerceIn(60L, 600L)
                                 for (m in fresh) {
                                     messages = (messages + m).takeLast(MAX)
                                     tick++
@@ -259,8 +255,9 @@ class LiveChatState(private val scope: CoroutineScope) {
                         failures++
                         if (failures >= 6) throw e
                     }
-                    // Data baru diambil tiap 5 detik (dihitung dari awal putaran); kalau sedang gagal, jedanya bertambah.
-                    val wait = if (failures == 0) POLL_MS else minOf(15_000L, POLL_MS * (failures + 1))
+                    // Seperti semula: jeda mengikuti yang diminta YouTube (1,5 sampai 8 detik), dihitung dari awal
+                    // putaran; kalau sedang gagal, jedanya bertambah.
+                    val wait = if (failures == 0) lastWait else minOf(15_000L, MAX_POLL_MS * (failures + 1) / 2)
                     delay((wait - (System.currentTimeMillis() - cycleStart)).coerceAtLeast(500L))
                 }
             } catch (e: CancellationException) {
@@ -281,6 +278,8 @@ class LiveChatState(private val scope: CoroutineScope) {
     private companion object {
         const val MAX = 300
         const val POLL_MS = 5_000L
+        const val MIN_POLL_MS = 1_500L
+        const val MAX_POLL_MS = 8_000L
     }
 }
 
@@ -378,7 +377,7 @@ fun LiveChatCard(videoId: String) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Chat langsung", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, modifier = Modifier.weight(1f))
-            Text("Diperbarui tiap 5 detik", color = c.onSurfaceVariant, fontSize = 11.sp)
+            Text("Langsung", color = c.onSurfaceVariant, fontSize = 11.sp)
         }
         Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth().then(if (chat.messages.isEmpty() && chat.status != null) Modifier else Modifier.height(360.dp)).clipToBounds()) {
