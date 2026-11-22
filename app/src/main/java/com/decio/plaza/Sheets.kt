@@ -242,7 +242,7 @@ private fun NewPlaylistRow(onCreate: (title: String, privacy: String) -> Unit) {
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
         Box(
-            Modifier.fillMaxWidth().height(56.dp).clip(CircleShape).background(c.surfaceContainerHigh).padding(horizontal = 20.dp),
+            Modifier.fillMaxWidth().height(56.dp).glassSurface(CircleShape, c.surfaceContainerHigh).padding(horizontal = 20.dp),
             contentAlignment = Alignment.CenterStart,
         ) {
             if (title.isEmpty()) Text(tr("Playlist name"), color = c.onSurfaceVariant, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
@@ -330,8 +330,7 @@ fun QueueCard(player: PlayerState, onOpen: () -> Unit) {
                 .padding(top = 16.dp)
                 .fillMaxWidth()
                 .pressable(enabled = !leaving, pressedScale = 0.98f, onClick = onOpen)
-                .clip(RoundedCornerShape(24.dp))
-                .background(c.secondaryContainer)
+                .glassSurface(RoundedCornerShape(24.dp), c.secondaryContainer)
                 .padding(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
