@@ -20,6 +20,8 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -54,14 +56,14 @@ object GlassSettings {
  */
 internal fun DrawScope.drawGlassBody(shape: Shape, tint: Color, alpha: Float = 1f) {
     if (alpha <= 0f) return
-    val outline = shape.createOutline(size, layoutDirection, this)
-    drawOutline(
-        outline,
+    val path = shape.createOutline(size, layoutDirection, this).toPath()
+    drawPath(
+        path,
         Brush.verticalGradient(listOf(tint.copy(alpha = 0.70f), tint.copy(alpha = 0.50f))),
         alpha = alpha,
     )
-    drawOutline(
-        outline,
+    drawPath(
+        path,
         Brush.verticalGradient(
             0f to Color.White.copy(alpha = 0.26f),
             0.55f to Color.Transparent,
@@ -69,8 +71,8 @@ internal fun DrawScope.drawGlassBody(shape: Shape, tint: Color, alpha: Float = 1
         ),
         alpha = alpha,
     )
-    drawOutline(
-        outline,
+    drawPath(
+        path,
         Brush.linearGradient(
             0f to Color.White.copy(alpha = 0.85f),
             0.45f to Color.White.copy(alpha = 0.12f),
@@ -81,6 +83,13 @@ internal fun DrawScope.drawGlassBody(shape: Shape, tint: Color, alpha: Float = 1
         alpha = alpha,
         style = Stroke(width = 2.2.dp.toPx()),
     )
+}
+
+/** Outline bentuk apa pun jadi Path, supaya bisa digambar dengan drawPath. */
+private fun Outline.toPath(): Path = when (this) {
+    is Outline.Rectangle -> Path().apply { addRect(rect) }
+    is Outline.Rounded -> Path().apply { addRoundRect(roundRect) }
+    is Outline.Generic -> path
 }
 
 /**
