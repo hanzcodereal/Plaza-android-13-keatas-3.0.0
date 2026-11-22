@@ -248,7 +248,15 @@ internal fun NavPill(
                     ambientShadowColor = Color.Black
                     spotShadowColor = Color.Black
                 }
-                .drawBehind { drawRect(c.surfaceVariant, alpha = 1f - shortsBarFade(shorts())) }
+                .drawBehind {
+                    val shown = 1f - shortsBarFade(shorts())
+                    if (GlassSettings.enabled) {
+                        // Liquid Glass: kapsul kaca mengikuti bentuk bar yang sedang berubah.
+                        drawGlassBody(playerBarShape(bar, size, barGate(morph.progress.value)), c.surfaceVariant, shown)
+                    } else {
+                        drawRect(c.surfaceVariant, alpha = shown)
+                    }
+                }
                 .playerBarGestures(bar, player, enabled = controlsActive, view = view, gate = gate, onPick = onPick),
         ) {
           CompositionLocalProvider(LocalContentColor provides c.onSurfaceVariant) {
