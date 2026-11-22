@@ -358,8 +358,8 @@ fun NotificationsScreen(contentPadding: PaddingValues, onBack: () -> Unit, onOpe
                     label,
                     color = if (on) c.surface else c.onSurface,
                     fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
-                    modifier = Modifier.clip(RoundedCornerShape(10.dp))
-                        .background(if (on) c.onSurface else c.surfaceContainerHighest)
+                    modifier = Modifier
+                        .glassSurface(RoundedCornerShape(10.dp), if (on) c.onSurface else c.surfaceContainerHighest)
                         .clickable { mentionsOnly = mentions }
                         .padding(horizontal = 16.dp, vertical = 9.dp),
                 )
