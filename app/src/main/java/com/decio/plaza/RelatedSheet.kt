@@ -57,8 +57,7 @@ fun RelatedSheet(state: PlayerState, onDismiss: () -> Unit) {
                 .widthIn(max = 640.dp)
                 .fillMaxWidth()
                 .fillMaxHeight(0.78f)
-                .clip(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp))
-                .background(c.surfaceContainerLow)
+                .glassSurface(RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp), c.surfaceContainerLow)
                 // A tap on the panel itself isn't a tap on the dark part behind it.
                 .pressable(pressedScale = 1f) { },
         ) {
