@@ -209,7 +209,7 @@ fun PostsShelf(posts: List<ChannelPost>, onOpen: (Int) -> Unit) {
             items(posts.size, key = { posts[it].id }) { i ->
                 val post = posts[i]
                 Column(
-                    Modifier.width(260.dp).clip(RoundedCornerShape(18.dp)).background(c.surfaceContainerLow)
+                    Modifier.width(260.dp).glassSurface(RoundedCornerShape(18.dp), c.surfaceContainerLow)
                         .clickable { onOpen(i) }.padding(12.dp),
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -225,7 +225,7 @@ fun PostsShelf(posts: List<ChannelPost>, onOpen: (Int) -> Unit) {
                         Spacer(Modifier.height(8.dp))
                         AsyncImage(
                             model = post.images.first(), contentDescription = null, contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxWidth().height(140.dp).clip(RoundedCornerShape(12.dp)).background(c.surfaceContainerHighest),
+                            modifier = Modifier.fillMaxWidth().height(140.dp).glassSurface(RoundedCornerShape(12.dp), c.surfaceContainerHighest),
                         )
                     }
                     if (!post.likes.isNullOrBlank() || !post.comments.isNullOrBlank()) {
