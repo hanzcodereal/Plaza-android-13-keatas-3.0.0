@@ -295,7 +295,7 @@ fun ThemedCircleAction(icon: ImageVector, contentDescription: String, badge: Int
     val c = MaterialTheme.colorScheme
     Box(Modifier.size(44.dp).pressable(onClick = onClick)) {
         Box(
-            Modifier.matchParentSize().clip(CircleShape).background(c.primaryContainer),
+            Modifier.matchParentSize().glassSurface(CircleShape, c.primaryContainer),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, contentDescription, tint = androidx.compose.material3.contentColorFor(c.primaryContainer), modifier = Modifier.size(22.dp)) }
         if (badge > 0) {
@@ -341,7 +341,7 @@ fun NotificationsScreen(contentPadding: PaddingValues, onBack: () -> Unit, onOpe
     val shown = all?.filter { !mentionsOnly || it.isMention }
     val menu = LocalVideoMenu.current
     val openChannel = LocalChannelOpener.current
-    Column(Modifier.fillMaxSize().background(c.surface).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().pageBackdrop(c.surface).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(48.dp).pressable(onClick = onBack), contentAlignment = Alignment.Center) {
                 Icon(Icons.AutoMirrored.Rounded.ArrowBack, tr("Back"), tint = c.onSurface)
