@@ -342,8 +342,7 @@ fun CommentsCard(state: CommentsState, onOpen: () -> Unit) {
             .padding(top = 16.dp)
             .fillMaxWidth()
             .pressable(enabled = state.comments.isNotEmpty() || (Account.signedIn && !state.disabled && !state.loading), pressedScale = 0.98f, onClick = onOpen)
-            .clip(shape)
-            .background(c.surfaceContainerLow)
+            .glassSurface(shape, c.surfaceContainerLow)
             .padding(horizontal = 16.dp, vertical = 14.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -463,8 +462,7 @@ fun CommentsPanel(state: CommentsState, partialTop: Dp, onClose: () -> Unit) {
                 .height(with(density) { height.value.toDp() })
                 .graphicsLayer { translationY = slide.value * size.height }
                 .shadow(16.dp, shape, ambientColor = Color.Black.copy(alpha = 0.18f), spotColor = Color.Black.copy(alpha = 0.22f))
-                .clip(shape)
-                .background(c.surfaceContainerLow)
+                .glassSurface(shape, c.surfaceContainerLow)
                 // Swallow taps so nothing underneath reacts through the panel.
                 .pointerInput(Unit) { awaitPointerEventScope { while (true) awaitPointerEvent() } }
                 .imePadding(),
@@ -555,7 +553,7 @@ private fun Composer(state: CommentsState) {
         state.postError?.let { Text(it, color = c.error, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp, bottom = 6.dp)) }
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
-                Modifier.weight(1f).clip(RoundedCornerShape(24.dp)).background(c.surfaceContainerHighest)
+                Modifier.weight(1f).glassSurface(RoundedCornerShape(24.dp), c.surfaceContainerHighest)
                     .padding(horizontal = 16.dp, vertical = 12.dp),
             ) {
                 if (state.draft.isEmpty()) {
