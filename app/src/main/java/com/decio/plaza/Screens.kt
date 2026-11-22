@@ -387,8 +387,7 @@ private fun PlaylistTile(playlist: PlaylistRef, modifier: Modifier, onClick: () 
         modifier = modifier
             .height(132.dp)
             .pressable(pressedScale = 0.97f, onClick = onClick)
-            .clip(shape)
-            .background(c.surfaceContainerLow)
+            .glassSurface(shape, c.surfaceContainerLow)
             .padding(14.dp),
         verticalArrangement = Arrangement.SpaceBetween,
     ) {
@@ -410,7 +409,7 @@ private fun PlaylistTile(playlist: PlaylistRef, modifier: Modifier, onClick: () 
 @Composable
 fun PlaylistScreen(playlist: PlaylistRef, feed: FeedState, contentPadding: PaddingValues, onBack: () -> Unit, onOpen: (VideoItem) -> Unit) {
     LaunchedEffect(playlist.id) { feed.ensureLoaded() }
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
+    Box(Modifier.fillMaxSize().pageBackdrop(MaterialTheme.colorScheme.surface)) {
     CollapsingHeaderLayout(
         resetKey = feed.generation,
         header = {
@@ -572,8 +571,7 @@ private fun CategoryChip(label: String, selected: Boolean, onClick: () -> Unit) 
     Box(
         Modifier
             .pressable(pressedScale = 0.96f, onClick = onClick)
-            .clip(RoundedCornerShape(14.dp))
-            .background(if (selected) c.primary else c.surfaceContainerHigh)
+            .glassSurface(RoundedCornerShape(14.dp), if (selected) c.primary else c.surfaceContainerHigh)
             .padding(horizontal = 16.dp, vertical = 9.dp),
     ) {
         Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = if (selected) c.onPrimary else c.onSurface, maxLines = 1)
