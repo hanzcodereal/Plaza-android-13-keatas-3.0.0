@@ -458,8 +458,7 @@ private fun ChannelSubscribeButton(subscribed: Boolean, modifier: Modifier = Mod
             .squishOn(subscribed)
             .height(46.dp)
             .pressable(onClick = onClick)
-            .clip(CircleShape)
-            .background(if (subscribed) c.secondaryContainer else c.onSurface),
+            .glassSurface(CircleShape, if (subscribed) c.secondaryContainer else c.onSurface),
         horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically,
     ) {
