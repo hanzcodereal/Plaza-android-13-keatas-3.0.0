@@ -138,8 +138,7 @@ fun CircleAction(icon: ImageVector, contentDescription: String, onClick: () -> U
         modifier = Modifier
             .size(44.dp)
             .pressable(onClick = onClick)
-            .clip(CircleShape)
-            .background(c.surfaceContainerHigh),
+            .glassSurface(CircleShape, c.surfaceContainerHigh),
         contentAlignment = Alignment.Center,
     ) {
         Icon(icon, contentDescription, tint = c.onSurface, modifier = Modifier.size(22.dp))
@@ -401,7 +400,7 @@ fun EmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(
-            modifier = Modifier.size(72.dp).clip(SunnyShape).background(c.primaryContainer),
+            modifier = Modifier.size(72.dp).glassSurface(SunnyShape, c.primaryContainer),
             contentAlignment = Alignment.Center,
         ) {
             Icon(icon, contentDescription = null, tint = c.onPrimaryContainer, modifier = Modifier.size(32.dp))
