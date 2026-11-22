@@ -9,6 +9,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
@@ -209,6 +210,8 @@ internal fun NavPill(
     val playPressed by playInteraction.collectIsPressedAsState()
     val playScale = animateFloatAsState(if (playPressed && !reduced) 0.94f else 1f, spring(dampingRatio = 0.6f, stiffness = 1400f), label = "playPress")
 
+    val currentSelected by androidx.compose.runtime.rememberUpdatedState(selected)
+    val currentOnSelect by androidx.compose.runtime.rememberUpdatedState(onSelect)
     Box(modifier.widthIn(max = NavWidth).height(NavHeight).fillMaxWidth().onPlaced { anchors.outer = it }) {
         Box(
             modifier = Modifier
@@ -294,6 +297,21 @@ internal fun NavPill(
                             val tabs = measurable.measure(Constraints.fixed(full, constraints.maxHeight))
                             layout(constraints.maxWidth, constraints.maxHeight) { tabs.place((constraints.maxWidth - full) / 2, 0) }
                         }
+                        // Liquid Glass: geser jari di sepanjang bilah untuk berpindah tab (bilah utama saja; di
+                        // Shorts dan di Bawaan tidak bisa digeser). Tab yang aktif melebar mengikuti jari.
+                        .pointerInput(GlassSettings.enabled, tabsEnabled, controlsActive) {
+                            if (!GlassSettings.enabled || !tabsEnabled || controlsActive) return@pointerInput
+                            androidx.compose.foundation.gestures.detectHorizontalDragGestures { change, _ ->
+                                val tabsNow = Tab.entries.filter { (it != Tab.Shorts || ShortsSetting.enabled) && (it != Tab.Search || !SearchPlacement.top) }
+                                val x = change.position.x.coerceIn(0f, (size.width - 1).toFloat())
+                                val idx = (x / size.width * tabsNow.size).toInt().coerceIn(0, tabsNow.size - 1)
+                                val target = tabsNow[idx]
+                                if (target != currentSelected) {
+                                    currentOnSelect(target)
+                                    view.performHapticFeedback(android.view.HapticFeedbackConstants.CLOCK_TICK)
+                                }
+                            }
+                        }
                         .padding(BarPadding),
                     horizontalArrangement = Arrangement.spacedBy(BarGap),
                     verticalAlignment = Alignment.CenterVertically,
@@ -301,7 +319,9 @@ internal fun NavPill(
                     val shown = Tab.entries.filter { (it != Tab.Shorts || ShortsSetting.enabled) && (it != Tab.Search || !SearchPlacement.top) }
                     shown.forEachIndexed { i, t ->
                         val active = t == selected
-                        val spec = if (reduced) snap<Float>() else tween(260, easing = Motion.Emphasized)
+                        val spec = if (reduced) snap<Float>()
+                        else if (GlassSettings.enabled) spring(dampingRatio = 0.72f, stiffness = 420f)
+                        else tween(260, easing = Motion.Emphasized)
                         val labelColor by animateColorAsState(
                             if (active) c.onPrimary else c.onSurfaceVariant,
                             if (reduced) snap() else tween(220, easing = Motion.Emphasized), label = "tabContent",
