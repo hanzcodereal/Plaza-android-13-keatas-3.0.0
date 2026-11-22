@@ -11,12 +11,14 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -49,6 +51,23 @@ object GlassSettings {
     }
 }
 
+/** Outline bentuk apa pun jadi Path, supaya bisa digambar dengan drawPath. */
+private fun Outline.toPath(): Path = when (this) {
+    is Outline.Rectangle -> Path().apply { addRect(rect) }
+    is Outline.Rounded -> Path().apply { addRoundRect(roundRect) }
+    is Outline.Generic -> path
+}
+
+private val GlassSheen = listOf(0f to Color.White.copy(alpha = 0.26f), 0.55f to Color.Transparent, 1f to Color.White.copy(alpha = 0.06f))
+
+private fun glassRim(w: Float, h: Float) = Brush.linearGradient(
+    0f to Color.White.copy(alpha = 0.85f),
+    0.45f to Color.White.copy(alpha = 0.12f),
+    1f to Color.White.copy(alpha = 0.45f),
+    start = Offset.Zero,
+    end = Offset(w, h),
+)
+
 /**
  * Isi kaca di dalam [shape]: tinta tema yang tembus pandang (lebih pekat di bawah, seperti cahaya jatuh
  * dari atas), kilau putih di bagian atas, dan tepi yang terang di sudut kiri atas dan kanan bawah.
@@ -57,98 +76,116 @@ object GlassSettings {
 internal fun DrawScope.drawGlassBody(shape: Shape, tint: Color, alpha: Float = 1f) {
     if (alpha <= 0f) return
     val path = shape.createOutline(size, layoutDirection, this).toPath()
-    drawPath(
-        path,
-        Brush.verticalGradient(listOf(tint.copy(alpha = 0.70f), tint.copy(alpha = 0.50f))),
-        alpha = alpha,
-    )
-    drawPath(
-        path,
-        Brush.verticalGradient(
-            0f to Color.White.copy(alpha = 0.26f),
-            0.55f to Color.Transparent,
-            1f to Color.White.copy(alpha = 0.06f),
-        ),
-        alpha = alpha,
-    )
-    drawPath(
-        path,
-        Brush.linearGradient(
-            0f to Color.White.copy(alpha = 0.85f),
-            0.45f to Color.White.copy(alpha = 0.12f),
-            1f to Color.White.copy(alpha = 0.45f),
-            start = Offset.Zero,
-            end = Offset(size.width, size.height),
-        ),
-        alpha = alpha,
-        style = Stroke(width = 2.2.dp.toPx()),
-    )
+    drawPath(path, Brush.verticalGradient(listOf(tint.copy(alpha = 0.70f), tint.copy(alpha = 0.50f))), alpha = alpha)
+    drawGlassRim(path, alpha)
 }
 
-/** Outline bentuk apa pun jadi Path, supaya bisa digambar dengan drawPath. */
-private fun Outline.toPath(): Path = when (this) {
-    is Outline.Rectangle -> Path().apply { addRect(rect) }
-    is Outline.Rounded -> Path().apply { addRoundRect(roundRect) }
-    is Outline.Generic -> path
+/** Hanya kilau dan tepi bercahaya di atas [path] (tanpa isi): dipakai juga untuk kaca buram bilah Shorts. */
+internal fun DrawScope.drawGlassRim(path: Path, alpha: Float = 1f) {
+    if (alpha <= 0f) return
+    drawPath(path, Brush.verticalGradient(*GlassSheen.toTypedArray()), alpha = alpha)
+    drawPath(path, glassRim(size.width, size.height), alpha = alpha, style = Stroke(width = 2.2.dp.toPx()))
 }
 
 /**
  * Permukaan berbentuk [shape] berwarna [tint]: polos seperti biasa, atau kaca di gaya Liquid Glass.
- * Pengganti `.clip(shape).background(tint)`.
+ * Pengganti `.clip(shape).background(tint)`. Bentuk dan kuas dihitung sekali per ukuran, bukan tiap
+ * gambar, jadi tetap ringan di daftar yang menggulir.
  */
 fun Modifier.glassSurface(shape: Shape, tint: Color): Modifier =
-    if (GlassSettings.enabled) clip(shape).drawBehind { drawGlassBody(shape, tint) }
-    else clip(shape).background(tint)
+    if (!GlassSettings.enabled) clip(shape).background(tint)
+    else clip(shape).drawWithCache {
+        val path = shape.createOutline(size, layoutDirection, this).toPath()
+        val body = Brush.verticalGradient(listOf(tint.copy(alpha = 0.70f), tint.copy(alpha = 0.50f)))
+        val sheen = Brush.verticalGradient(*GlassSheen.toTypedArray())
+        val rim = glassRim(size.width, size.height)
+        val stroke = Stroke(width = 2.2.dp.toPx())
+        onDrawBehind {
+            drawPath(path, body)
+            drawPath(path, sheen)
+            drawPath(path, rim, style = stroke)
+        }
+    }
 
-/**
- * Latar halaman: warna [base] polos, atau di Liquid Glass warna itu ditambah tiga cahaya lembut dari warna
- * tema yang bergeser sangat pelan (±26 detik, bolak-balik), supaya kaca di atasnya punya sesuatu untuk
- * dipantulkan. Gerakan hanya memicu penggambaran ulang, bukan komposisi ulang, dan diam kalau
- * gerakan dikurangi di pengaturan HP.
- */
+/** Seperti [glassSurface] tapi tanpa memotong isinya (untuk elemen yang percikannya boleh keluar dari tepi). */
+fun Modifier.glassBackground(shape: Shape, tint: Color): Modifier =
+    if (!GlassSettings.enabled) background(tint, shape)
+    else drawWithCache {
+        val path = shape.createOutline(size, layoutDirection, this).toPath()
+        val body = Brush.verticalGradient(listOf(tint.copy(alpha = 0.70f), tint.copy(alpha = 0.50f)))
+        val sheen = Brush.verticalGradient(*GlassSheen.toTypedArray())
+        val rim = glassRim(size.width, size.height)
+        val stroke = Stroke(width = 2.2.dp.toPx())
+        onDrawBehind {
+            drawPath(path, body)
+            drawPath(path, sheen)
+            drawPath(path, rim, style = stroke)
+        }
+    }
+
+/** Gerak pelan latar Liquid Glass: 0..1 bolak-balik tiap ±26 detik; diam (0,5) kalau gerakan dikurangi. */
 @Composable
-fun Modifier.pageBackdrop(base: Color): Modifier {
-    if (!GlassSettings.enabled) return background(base)
-    val c = MaterialTheme.colorScheme
-    val dark = isDarkTheme()
+fun rememberGlassDrift(): State<Float> {
     val reduced = rememberReducedMotion()
     val transition = rememberInfiniteTransition(label = "glassBackdrop")
-    val drift by transition.animateFloat(
+    val drift = transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(tween(26_000, easing = LinearEasing), RepeatMode.Reverse),
         label = "drift",
     )
-    val strength = if (dark) 1f else 0.7f
+    return if (reduced) androidx.compose.runtime.remember { mutableStateOf(0.5f) } else drift
+}
+
+/** Tiga cahaya lembut dari warna tema (bergeser dengan [t] 0..1) di seluruh area gambar; [fade] 0..1 untuk memudar. */
+internal fun DrawScope.drawGlassBlobs(first: Color, second: Color, third: Color, t: Float, strength: Float, fade: Float = 1f) {
+    if (fade <= 0f) return
+    val w = size.width
+    val h = size.height
+    val big = maxOf(w, h)
+    drawRect(
+        Brush.radialGradient(
+            listOf(first.copy(alpha = 0.34f * strength * fade), Color.Transparent),
+            center = Offset(w * (0.10f + 0.35f * t), h * (0.10f + 0.12f * t)),
+            radius = big * 0.62f,
+        ),
+    )
+    drawRect(
+        Brush.radialGradient(
+            listOf(second.copy(alpha = 0.26f * strength * fade), Color.Transparent),
+            center = Offset(w * (0.95f - 0.30f * t), h * (0.45f + 0.15f * t)),
+            radius = big * 0.55f,
+        ),
+    )
+    drawRect(
+        Brush.radialGradient(
+            listOf(third.copy(alpha = 0.40f * strength * fade), Color.Transparent),
+            center = Offset(w * (0.25f + 0.30f * t), h * (0.95f - 0.12f * t)),
+            radius = big * 0.6f,
+        ),
+    )
+}
+
+/** Kekuatan cahaya latar: penuh di tema gelap, lebih lembut di tema terang. */
+@Composable
+fun glassBlobStrength(): Float = if (isDarkTheme()) 1f else 0.7f
+
+/**
+ * Latar halaman: warna [base] polos, atau di Liquid Glass warna itu ditambah tiga cahaya lembut dari warna
+ * tema yang bergeser sangat pelan, supaya kaca di atasnya punya sesuatu untuk dipantulkan. Gerakan hanya
+ * memicu penggambaran ulang, bukan komposisi ulang.
+ */
+@Composable
+fun Modifier.pageBackdrop(base: Color): Modifier {
+    if (!GlassSettings.enabled) return background(base)
+    val c = MaterialTheme.colorScheme
+    val drift = rememberGlassDrift()
+    val strength = glassBlobStrength()
     val first = c.primary
     val second = c.tertiary
     val third = c.primaryContainer
     return drawBehind {
         drawRect(base)
-        val t = if (reduced) 0.5f else drift
-        val w = size.width
-        val h = size.height
-        val big = maxOf(w, h)
-        drawRect(
-            Brush.radialGradient(
-                listOf(first.copy(alpha = 0.34f * strength), Color.Transparent),
-                center = Offset(w * (0.10f + 0.35f * t), h * (0.10f + 0.12f * t)),
-                radius = big * 0.62f,
-            ),
-        )
-        drawRect(
-            Brush.radialGradient(
-                listOf(second.copy(alpha = 0.26f * strength), Color.Transparent),
-                center = Offset(w * (0.95f - 0.30f * t), h * (0.45f + 0.15f * t)),
-                radius = big * 0.55f,
-            ),
-        )
-        drawRect(
-            Brush.radialGradient(
-                listOf(third.copy(alpha = 0.40f * strength), Color.Transparent),
-                center = Offset(w * (0.25f + 0.30f * t), h * (0.95f - 0.12f * t)),
-                radius = big * 0.6f,
-            ),
-        )
+        drawGlassBlobs(first, second, third, drift.value, strength)
     }
 }
