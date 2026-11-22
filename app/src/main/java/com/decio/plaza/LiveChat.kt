@@ -203,7 +203,7 @@ internal object LiveChatApi {
     }
 }
 
-/** Chat langsung satu siaran: memuat pesan terus-menerus selagi tampil, tiap 1 detik. */
+/** Chat langsung satu siaran: memuat pesan terus-menerus selagi tampil, tiap 5 detik. */
 @Stable
 class LiveChatState(private val scope: CoroutineScope) {
     var messages by mutableStateOf<List<LiveChatMessage>>(emptyList())
@@ -228,19 +228,30 @@ class LiveChatState(private val scope: CoroutineScope) {
                 if (token == null) { status = "Chat langsung tidak tersedia untuk siaran ini."; return@launch }
                 var failures = 0
                 while (isActive && token != null) {
+                    val cycleStart = System.currentTimeMillis()
                     try {
                         val page = LiveChatApi.poll(token)
                         failures = 0
-                        if (page.messages.isNotEmpty()) {
-                            val seen = messages.mapTo(HashSet()) { it.id }
-                            val fresh = page.messages.filter { seen.add(it.id) }
-                            if (fresh.isNotEmpty()) {
-                                messages = (messages + fresh).takeLast(MAX)
-                                tick++
-                            }
-                        }
+                        val seen = messages.mapTo(HashSet()) { it.id }
+                        val fresh = page.messages.filter { seen.add(it.id) }
                         page.sendParams?.let { sendParams = it; canSend = true }
                         token = page.next
+                        if (fresh.isNotEmpty()) {
+                            if (messages.isEmpty() || fresh.size == 1) {
+                                // Putaran pertama (pesan yang sudah ada) dan pesan tunggal: langsung tampil.
+                                messages = (messages + fresh).takeLast(MAX)
+                                tick++
+                            } else {
+                                // Pesan satu putaran tampil bergantian sepanjang jedanya (seperti di YouTube),
+                                // bukan sekaligus, supaya chat mengalir halus.
+                                val gap = (POLL_MS * 8 / 10 / fresh.size).coerceIn(60L, 600L)
+                                for (m in fresh) {
+                                    messages = (messages + m).takeLast(MAX)
+                                    tick++
+                                    delay(gap)
+                                }
+                            }
+                        }
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
@@ -248,8 +259,9 @@ class LiveChatState(private val scope: CoroutineScope) {
                         failures++
                         if (failures >= 6) throw e
                     }
-                    // Data baru diambil tiap 1 detik; kalau sedang gagal, jedanya bertambah.
-                    delay(if (failures == 0) POLL_MS else minOf(8_000L, POLL_MS * (failures + 1) * 2))
+                    // Data baru diambil tiap 5 detik (dihitung dari awal putaran); kalau sedang gagal, jedanya bertambah.
+                    val wait = if (failures == 0) POLL_MS else minOf(15_000L, POLL_MS * (failures + 1))
+                    delay((wait - (System.currentTimeMillis() - cycleStart)).coerceAtLeast(500L))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -268,7 +280,7 @@ class LiveChatState(private val scope: CoroutineScope) {
 
     private companion object {
         const val MAX = 300
-        const val POLL_MS = 1_000L
+        const val POLL_MS = 5_000L
     }
 }
 
@@ -366,7 +378,7 @@ fun LiveChatCard(videoId: String) {
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Chat langsung", fontWeight = FontWeight.ExtraBold, fontSize = 15.sp, modifier = Modifier.weight(1f))
-            Text("Diperbarui tiap detik", color = c.onSurfaceVariant, fontSize = 11.sp)
+            Text("Diperbarui tiap 5 detik", color = c.onSurfaceVariant, fontSize = 11.sp)
         }
         Spacer(Modifier.height(10.dp))
         Box(Modifier.fillMaxWidth().then(if (chat.messages.isEmpty() && chat.status != null) Modifier else Modifier.height(360.dp)).clipToBounds()) {
