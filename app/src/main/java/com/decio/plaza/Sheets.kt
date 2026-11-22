@@ -609,6 +609,22 @@ fun AppearanceSettings() {
             }
         }
         Spacer(Modifier.height(14.dp))
+        // Gaya: Bawaan atau Liquid Glass (latar hidup dan permukaan kaca); terpisah dari tema warna di bawah.
+        Text(tr("Style"), color = c.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+        Spacer(Modifier.height(8.dp))
+        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            listOf(false to tr("Default"), true to "Liquid Glass").forEach { (glass, label) ->
+                val on = GlassSettings.enabled == glass
+                Box(
+                    Modifier
+                        .pressable { GlassSettings.choose(glass) }
+                        .clip(RoundedCornerShape(if (on) 18.dp else 10.dp))
+                        .background(if (on) c.secondaryContainer else c.surfaceContainerHighest)
+                        .padding(horizontal = 16.dp, vertical = 9.dp),
+                ) { Text(label, color = if (on) c.onSecondaryContainer else c.onSurfaceVariant, fontWeight = FontWeight.Bold, fontSize = 13.sp, maxLines = 1, softWrap = false) }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
         val choices = buildList {
             if (ThemeSettings.wallpaperAvailable) add(null to "Wallpaper")
             PLAZA_THEMES.forEach { add(it.hex to it.name) }
