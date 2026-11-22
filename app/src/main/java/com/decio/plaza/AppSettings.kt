@@ -259,7 +259,7 @@ fun RegionPrompt() {
 private fun RegionRow(flag: String, label: String, onClick: () -> Unit) {
     val c = MaterialTheme.colorScheme
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 3.dp).clip(RoundedCornerShape(16.dp)).background(c.surfaceContainerLow)
+        Modifier.fillMaxWidth().padding(vertical = 3.dp).glassSurface(RoundedCornerShape(16.dp), c.surfaceContainerLow)
             .pressable(pressedScale = 0.98f, onClick = onClick).padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
