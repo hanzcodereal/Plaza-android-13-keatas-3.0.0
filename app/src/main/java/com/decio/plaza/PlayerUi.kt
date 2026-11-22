@@ -179,6 +179,9 @@ fun PlayerScreen(
 
     val pageColor = c.surface
     val miniColor = c.surfaceContainerHighest
+    // Liquid Glass: halaman tonton memakai latar hidup yang sama dengan halaman lain.
+    val glassDrift = if (GlassSettings.enabled) rememberGlassDrift() else null
+    val glassStrength = glassBlobStrength()
     Box(
         Modifier
             .fillMaxSize()
@@ -201,6 +204,9 @@ fun PlayerScreen(
                 val p = morph.progress.value
                 // Opaque throughout: at the small end it IS the mini-player card (same color).
                 drawRect(lerpColor(miniColor, pageColor, ramp(p, 0f, 0.6f)))
+                if (glassDrift != null) {
+                    drawGlassBlobs(c.primary, c.tertiary, c.primaryContainer, glassDrift.value, glassStrength, ramp(p, 0.3f, 0.9f))
+                }
             }
             // Open: a hit target over the whole screen, so taps never reach the tabs beneath.
             // Collapsing: no hit target at all, so touches fall through to the mini-player.
@@ -536,8 +542,7 @@ private fun SubscribeButton(subscribed: Boolean, onClick: () -> Unit) {
             .squishOn(subscribed)
             .height(44.dp)
             .pressable(onClick = onClick)
-            .clip(RoundedCornerShape(radius))
-            .background(if (subscribed) c.secondaryContainer else c.onSurface)
+            .glassSurface(RoundedCornerShape(radius), if (subscribed) c.secondaryContainer else c.onSurface)
             .animateContentSize(spring(dampingRatio = 0.7f, stiffness = 500f))
             .padding(horizontal = if (subscribed) 14.dp else 20.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -684,7 +689,7 @@ private fun ActionPill(
             .height(44.dp)
             .pressable(onClick = onClick)
             // background(shape), not clip: the like sparks may fly past the pill's edge.
-            .background(bg, shape)
+            .glassBackground(shape, bg)
             .animateContentSize(spring(dampingRatio = 0.7f, stiffness = 500f))
             .padding(horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -728,8 +733,7 @@ fun MiniPlayer(state: PlayerState, onExpand: () -> Unit, modifier: Modifier = Mo
             .height(MiniHeight)
             .pressable(pressedScale = 0.98f, onClick = onExpand)
             .shadow(16.dp, shape, ambientColor = Color.Black.copy(alpha = 0.12f), spotColor = Color.Black.copy(alpha = 0.18f))
-            .clip(shape)
-            .background(c.surfaceContainerHighest)
+            .glassSurface(shape, c.surfaceContainerHighest)
     ) {
         Row(Modifier.fillMaxSize().padding(start = MiniThumbStart, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             // The live video, not a still. While the player is open or morphing, this slot
